@@ -14,7 +14,7 @@
 
 typedef int (*FFAppMainFn)(int argc, char **argv);
 
-static int FFPatchLoadAndRun(const char *dylibPath, int argc, char **argv) {
+static int FFPatchLoadAndRun(const char *dylibPath, int argc, char **argv, int *exitStatus) {
     void *handle = dlopen(dylibPath, RTLD_NOW | RTLD_GLOBAL);
     if (handle == NULL) {
         fprintf(stderr, "ffpatch_launcher: dlopen(%s) falhou: %s\n", dylibPath, dlerror());
@@ -25,7 +25,8 @@ static int FFPatchLoadAndRun(const char *dylibPath, int argc, char **argv) {
         fprintf(stderr, "ffpatch_launcher: símbolo FFAppMain ausente em %s\n", dylibPath);
         return 0;
     }
-    return entry(argc, argv);
+    if (exitStatus != NULL) *exitStatus = entry(argc, argv);
+    return 1;
 }
 
 int main(int argc, char **argv) {
@@ -44,15 +45,16 @@ int main(int argc, char **argv) {
     const char *directory = dirname(buffer);
 
     char candidate[8192];
+    int appExitStatus = 1;
 
     // Preferred layout: App.app/Frameworks/ffpatch.dylib (matches Theos and
     // Xcode's Frameworks folder and what the packaging script produces).
     snprintf(candidate, sizeof(candidate), "%s/Frameworks/ffpatch.dylib", directory);
-    if (FFPatchLoadAndRun(candidate, argc, argv) != 0) return 0;
+    if (FFPatchLoadAndRun(candidate, argc, argv, &appExitStatus)) return appExitStatus;
 
     // Fallback: dylib dropped next to the executable.
     snprintf(candidate, sizeof(candidate), "%s/ffpatch.dylib", directory);
-    if (FFPatchLoadAndRun(candidate, argc, argv) != 0) return 0;
+    if (FFPatchLoadAndRun(candidate, argc, argv, &appExitStatus)) return appExitStatus;
 
     fprintf(stderr, "ffpatch_launcher: ffpatch.dylib não encontrada em %s (Frameworks/ e raiz)\n",
             directory);

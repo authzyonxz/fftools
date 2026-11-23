@@ -56,6 +56,11 @@ jobs:
           test -f "$APP/Catalog.plist"
           test ! -d "$APP/_CodeSignature"
           test ! -f "$APP/embedded.mobileprovision"
+          if ! nm -m "$APP/Frameworks/ffpatch.dylib" | awk '$NF == "_FFAppMain" && $(NF-1) == "external" && $(NF-2) != "private" { found=1 } END { exit !found }'; then
+            echo "FFAppMain não está exportado para o launcher (dlsym)." >&2
+            exit 1
+          fi
+          echo "FFAppMain exportado para dlsym: OK"
           echo "IPA is unsigned and contains its masked catalog configuration."
           echo "--- linked images ---"
           otool -L "$APP/Frameworks/ffpatch.dylib"

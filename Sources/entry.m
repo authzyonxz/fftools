@@ -22,6 +22,9 @@ static void FFPatchDylibLoaded(void) {
     }
 }
 
+// O launcher resolve este ponto de entrada com dlsym; mantenha o símbolo
+// exportado mesmo quando o restante da biblioteca usa visibilidade oculta.
+__attribute__((visibility("default"), used))
 int FFAppMain(int argc, char *argv[]) {
     @autoreleasepool {
         FFLog(@"entry: FFAppMain — subindo UIApplicationMain (ObjC/UIKit)");
