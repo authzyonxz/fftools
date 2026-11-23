@@ -21,7 +21,8 @@ ffpatch_FILES = $(wildcard Sources/*.m) \
                 $(wildcard Sources/Vendor/*.m) \
                 $(wildcard Sources/Vendor/*.c)
 
-ffpatch_FRAMEWORKS = UIKit Foundation CoreGraphics QuartzCore CoreFoundation IOSurface
+ffpatch_FRAMEWORKS = UIKit Foundation CoreGraphics QuartzCore CoreFoundation IOSurface \
+                     Security CFNetwork SystemConfiguration
 # IOSurface só existe como private framework no iOS: o Theos precisa do caminho
 # extra para resolver os headers do kexploit (IOSurfaceRef.h).
 ffpatch_PRIVATE_FRAMEWORKS = IOSurface
@@ -29,6 +30,7 @@ ffpatch_PRIVATE_FRAMEWORKS = IOSurface
 ffpatch_CFLAGS = -fobjc-arc -std=gnu17 -fblocks -fvisibility=hidden -DFF_ENABLE_ANTIDEBUG=1 \
                  -I$(THEOS_PROJECT_DIR)/Sources \
                  -I$(THEOS_PROJECT_DIR)/Sources/Vendor \
+                 -I$(THEOS_PROJECT_DIR)/Sources/Vendor/LogosAPI \
                  -Wno-deprecated-declarations \
                  -Wno-unused-variable \
                  -Wno-unused-function \
@@ -37,7 +39,8 @@ ffpatch_CFLAGS = -fobjc-arc -std=gnu17 -fblocks -fvisibility=hidden -DFF_ENABLE_
 
 
 
-ffpatch_LDFLAGS = -Wl,-x -Wl,-dead_strip
+ffpatch_LDFLAGS = -Wl,-x -Wl,-dead_strip -ObjC -lz \
+                  $(THEOS_PROJECT_DIR)/Sources/Vendor/LogosAPI/libAPIClientLite.a
 
 include $(THEOS_MAKE_PATH)/library.mk
 

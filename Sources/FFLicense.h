@@ -1,6 +1,6 @@
 //
 //  FFLicense.h
-//  FFPatch — profile tab data: key, duration, package, supported versions, build.
+//  FFPatch — API-backed package, expiry and validation state.
 //
 
 #ifndef FF_LICENSE_H
@@ -10,14 +10,18 @@
 
 NS_ASSUME_NONNULL_BEGIN
 
+FOUNDATION_EXPORT NSNotificationName const FFLicenseDidUpdateNotification;
+
 @interface FFLicense : NSObject
 
-@property (nonatomic, copy) NSString *key;
-@property (nonatomic, copy) NSString *duration;          // "30 dias" / "expira em 23/12/2026"
-@property (nonatomic, copy) NSString *packageName;       // com.external.app
-@property (nonatomic, copy) NSString *compatibleRanges;  // "iOS 17.0–18.7.1 · ..."
-@property (nonatomic, copy) NSString *build;             // "1 (0.1.0)"
-@property (nonatomic, copy) NSString *status;            // "ATIVA" / "EXPIRADA" / "LOCAL"
+@property (nonatomic, copy) NSString *key;                // Retained for local compatibility; never shown in Perfil.
+@property (nonatomic, copy) NSString *duration;           // API expiry date / status text.
+@property (nonatomic, copy) NSString *packageName;        // Package name returned by Logos API.
+@property (nonatomic, copy) NSString *compatibleRanges;
+@property (nonatomic, copy) NSString *build;
+@property (nonatomic, copy) NSString *status;             // API validation status.
+@property (nonatomic, assign, readonly) BOOL apiValidated;
+@property (nonatomic, assign, readonly) BOOL apiValidationPending;
 
 /* Device rows shown under the profile card. */
 @property (nonatomic, copy) NSString *deviceModel;
@@ -27,6 +31,7 @@ NS_ASSUME_NONNULL_BEGIN
 @property (nonatomic, copy) NSString *accessStatus;
 
 + (instancetype)current;
+- (void)validateWithCompletion:(nullable void (^)(BOOL isValid))completion;
 - (NSString *)summaryText;
 
 @end

@@ -85,12 +85,25 @@
     [super viewDidLoad];
     self.view.backgroundColor = [FFTheme background];
     self.title = @"Perfil";
+    [[NSNotificationCenter defaultCenter] addObserver:self
+                                             selector:@selector(licenseDidUpdate:)
+                                                 name:FFLicenseDidUpdateNotification
+                                               object:nil];
     [self rebuild];
 }
 
 - (void)viewWillAppear:(BOOL)animated {
     [super viewWillAppear:animated];
     [self rebuild];
+}
+
+- (void)licenseDidUpdate:(NSNotification *)notification {
+    (void)notification;
+    if (self.isViewLoaded) [self rebuild];
+}
+
+- (void)dealloc {
+    [[NSNotificationCenter defaultCenter] removeObserver:self];
 }
 
 - (void)rebuild {
@@ -135,8 +148,7 @@
 
     // ---- license card ------------------------------------------------------
     NSArray<FFValueRowView *> *licenseRows = @[
-        [[FFValueRowView alloc] initWithTitle:@"Chave" value:license.key monospaced:YES],
-        [[FFValueRowView alloc] initWithTitle:@"Duração" value:license.duration monospaced:NO],
+        [[FFValueRowView alloc] initWithTitle:@"Expiração" value:license.duration monospaced:NO],
         [[FFValueRowView alloc] initWithTitle:@"Status" value:license.status monospaced:NO],
         [[FFValueRowView alloc] initWithTitle:@"Package" value:license.packageName monospaced:YES],
         [[FFValueRowView alloc] initWithTitle:@"Versões compatíveis" value:license.compatibleRanges monospaced:NO],
@@ -189,13 +201,6 @@
     [logButton.heightAnchor constraintEqualToConstant:48].active = YES;
     [logButton addTarget:self action:@selector(exportDiagnosticsTapped) forControlEvents:UIControlEventTouchUpInside];
     [stack addArrangedSubview:logButton];
-
-    UILabel *footer = [UILabel new];
-    footer.text = @"FFPatch · engine ObjC · payloads crus do container";
-    footer.font = [UIFont systemFontOfSize:11 weight:UIFontWeightRegular];
-    footer.textColor = [FFTheme secondaryText];
-    footer.textAlignment = NSTextAlignmentCenter;
-    [stack addArrangedSubview:footer];
 }
 
 - (UIView *)cardWithRows:(NSArray<FFValueRowView *> *)rows {

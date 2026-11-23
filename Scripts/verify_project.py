@@ -129,7 +129,8 @@ def check_sources():
         "launcher/main.c",
         "Scripts/build_ipa.sh", "Scripts/build_theos.sh", "Scripts/package_ipa_theos.sh",
         "Scripts/make_icons.py",
-        "Scripts/protect_config.py", "Scripts/verify_project.py",
+        "Scripts/protect_config.py", "Scripts/generate_api_auth.py", "Scripts/verify_project.py",
+        "Sources/Vendor/LogosAPI/APIClient.h", "Sources/Vendor/LogosAPI/libAPIClientLite.a",
         "Resources/SourceArt/ff_normal.jpg", "Resources/SourceArt/ff_max.jpg",
         "Resources/SourceArt/app_logo.jpg",
     ]
@@ -137,6 +138,39 @@ def check_sources():
         if not os.path.isfile(os.path.join(ROOT, relative)):
             fail(f"fonte ausente: {relative}")
     notes.append(f"{len(required)} arquivos de fonte/scripts conferidos")
+
+
+def check_logos_api_integration():
+    """Check build wiring without looking for or requiring a token value."""
+    references = {
+        "Scripts/generate_api_auth.py": (
+            "LOGOS_API_TOKEN", "tokenMasked", "MASK_KEY = 0x5B",
+            "((index * 31) & 0xFF)",
+        ),
+        "Scripts/build_ipa.sh": (
+            "generate_api_auth.py", "libAPIClientLite.a", "Sources/Vendor/LogosAPI",
+            "-framework CFNetwork", "-framework SystemConfiguration", "APIAuth.plist",
+        ),
+        "Scripts/package_ipa_theos.sh": ("generate_api_auth.py", "APIAuth.plist"),
+        "Makefile": (
+            "libAPIClientLite.a", "Sources/Vendor/LogosAPI", "CFNetwork",
+            "SystemConfiguration", "-ObjC", "-lz",
+        ),
+        ".github/workflows/build.yml": (
+            "LOGOS_API_TOKEN: ${{ secrets.LOGOS_API_TOKEN }}", "APIAuth.plist",
+        ),
+    }
+    for relative, expected in references.items():
+        path = os.path.join(ROOT, relative)
+        if not os.path.isfile(path):
+            fail(f"integração Logos API: arquivo ausente: {relative}")
+            continue
+        with open(path, encoding="utf-8") as handle:
+            text = handle.read()
+        for reference in expected:
+            if reference not in text:
+                fail(f"integração Logos API: referência ausente em {relative}: {reference}")
+    notes.append("Logos API: header/library, geração mascarada e referências de build/bundle/Actions conferidas (sem exigir valor do token)")
 
 
 def check_site():
@@ -182,6 +216,7 @@ def main():
     check_plists()
     check_assets()
     check_sources()
+    check_logos_api_integration()
     check_site()
     check_manifest_consistency()
 

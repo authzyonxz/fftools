@@ -49,6 +49,19 @@ derived from other projects. It is not promotion.
 - **Pocket Poster / Nugget** — LeminLimez and contributors, GPL-3.0.
   PosterBoard paths and the MHA-C2 container workflow lineage.
 
+## Build-time authentication library
+
+- **Logos API Authentication Lite** — author Bao Nguyen (`baontq23`), supplied
+  as `Sources/Vendor/LogosAPI/APIClient.h` and
+  `Sources/Vendor/LogosAPI/libAPIClientLite.a`; provenance: upstream release/tag
+  [`v6.2.0`](https://github.com/baontq23/Logos-API-Authentication/releases/tag/v6.2.0),
+  including the upstream `API (Lite Secure)` distribution.
+  The inspected upstream repository root and Lite directory contain no
+  `LICENSE` file, and its README does not state a license. **No license is
+  declared in the inspected upstream material; redistribution permission and
+  applicable terms therefore remain unresolved and should be confirmed with
+  the rights holder.**
+
 ## Artwork
 
 - Free Fire Normal logo: supplied by the project owner at

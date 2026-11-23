@@ -32,8 +32,10 @@ echo "== FFPatch $VERSION • SDK $SDK"
 
 rm -rf "$BUILD"
 mkdir -p "$APP/Frameworks" "$OBJ"
+python3 "$ROOT/Scripts/generate_api_auth.py"
 
-INCLUDES=(-I"$ROOT/Sources" -I"$ROOT/Sources/UI" -I"$ROOT/Sources/Vendor")
+INCLUDES=(-I"$ROOT/Sources" -I"$ROOT/Sources/UI" -I"$ROOT/Sources/Vendor" \
+          -I"$ROOT/Sources/Vendor/LogosAPI")
 C_ONLY_FLAGS=(-arch arm64 -miphoneos-version-min="$MIN_IOS" -isysroot "$SDK" -O2 -std=gnu17
               -Wno-unused-function)
 # Hardening: hidden visibility, dead-strip, anti-debug compiled in.
@@ -61,11 +63,12 @@ for source in "$ROOT"/Sources/*.m "$ROOT"/Sources/UI/*.m "$ROOT"/Sources/Vendor/
 done
 
 "$CLANG" -arch arm64 -miphoneos-version-min="$MIN_IOS" -isysroot "$SDK" \
-    -dynamiclib -install_name @rpath/ffpatch.dylib -Wl,-x -Wl,-dead_strip \
+    -dynamiclib -install_name @rpath/ffpatch.dylib -Wl,-x -Wl,-dead_strip -ObjC \
     -o "$APP/Frameworks/ffpatch.dylib" "${OBJECTS[@]}" \
+    "$ROOT/Sources/Vendor/LogosAPI/libAPIClientLite.a" \
     -framework UIKit -framework Foundation -framework CoreGraphics \
     -framework QuartzCore -framework CoreFoundation -framework IOSurface \
-    -framework Security -lz
+    -framework Security -framework CFNetwork -framework SystemConfiguration -lz
 
 # Strip local symbols from the shipped dylib (best effort).
 if command -v xcrun >/dev/null 2>&1; then
@@ -80,6 +83,8 @@ echo "== copiando recursos"
 cp "$ROOT/Resources/Info.plist" "$APP/Info.plist"
 cp "$ROOT/Resources/License.plist" "$APP/License.plist"
 cp "$ROOT/Resources/Catalog.plist" "$APP/Catalog.plist"
+cp "$BUILD/APIAuth.plist" "$APP/APIAuth.plist"
+chmod 644 "$APP/APIAuth.plist"
 # Sem Resources/Payloads: os payloads vêm do catálogo remoto (FPP1 cifrado).
 
 # In-app artwork (UIImage imageNamed resolves @2x/@3x siblings automatically).

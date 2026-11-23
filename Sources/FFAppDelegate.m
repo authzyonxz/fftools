@@ -14,6 +14,7 @@
 #import "FFProfileViewController.h"
 #import "FFWidgets.h"
 #import "FFTheme.h"
+#import "FFLicense.h"
 
 @interface FFAppDelegate ()
 @property (nonatomic, strong) UITabBarController *tabs;
@@ -46,6 +47,7 @@
     [self showLoadingWithText:@"sincronizando catálogo"];
     [self.window makeKeyAndVisible];
 
+    [[FFLicense current] validateWithCompletion:nil];
     [self startCatalogSyncWithTimeout:12.0];
     [self startSandboxInBackground];
     return YES;
@@ -65,7 +67,7 @@
 
     UILabel *label = [UILabel new];
     label.translatesAutoresizingMaskIntoConstraints = NO;
-    label.text = @"FFPatch";
+    label.text = @"EXTERNAL";
     label.font = [UIFont systemFontOfSize:22 weight:UIFontWeightBold];
     label.textColor = [UIColor whiteColor];
     label.textAlignment = NSTextAlignmentCenter;

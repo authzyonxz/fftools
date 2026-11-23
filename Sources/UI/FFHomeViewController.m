@@ -12,8 +12,23 @@
 #import "FFCore.h"
 #import "FFContainerStore.h"
 #import "FFCatalogClient.h"
+#import "FFLicense.h"
 
 static NSString *const FFActiveGameDefaultsKey = @"FFActiveGameID";
+
+static BOOL FFIsMaxGame(FFGame *game) {
+    return [game.gameID.lowercaseString isEqualToString:@"freefiremax"] ||
+           [game.bundleID.lowercaseString isEqualToString:@"com.dts.freefiremax"];
+}
+
+static FFGame *FFNormalGame(FFManifest *manifest) {
+    FFGame *normal = [manifest gameWithID:@"freefireth"];
+    if (normal != nil && !FFIsMaxGame(normal)) return normal;
+    for (FFGame *game in manifest.games) {
+        if (!FFIsMaxGame(game)) return game;
+    }
+    return nil;
+}
 
 @interface FFHomeViewController ()
 
@@ -43,7 +58,9 @@ static NSString *const FFActiveGameDefaultsKey = @"FFActiveGameID";
         _groupContainers = [NSMutableDictionary dictionary];
 
         NSString *storedGameID = [[NSUserDefaults standardUserDefaults] stringForKey:FFActiveGameDefaultsKey];
-        _activeGame = [manifest gameWithID:storedGameID ?: @""] ?: manifest.games.firstObject;
+        FFGame *storedGame = [manifest gameWithID:storedGameID ?: @""];
+        _activeGame = FFIsMaxGame(storedGame) ? FFNormalGame(manifest) : storedGame;
+        if (_activeGame == nil) _activeGame = FFNormalGame(manifest) ?: manifest.games.firstObject;
     }
     return self;
 }
@@ -248,6 +265,18 @@ static NSString *const FFActiveGameDefaultsKey = @"FFActiveGameID";
 #pragma mark - Actions
 
 - (void)gameCardTapped:(FFGameCardView *)sender {
+    if (FFIsMaxGame(sender.game)) {
+        FFGame *normal = FFNormalGame(self.manifest);
+        if (normal != nil) {
+            self.activeGame = normal;
+            [[NSUserDefaults standardUserDefaults] setObject:normal.gameID
+                                                     forKey:FFActiveGameDefaultsKey];
+            [self reloadState];
+        }
+        [self presentMaintenanceAlert];
+        FFLog(@"ui: Free Fire MAX em manutenção; Free Fire normal selecionado");
+        return;
+    }
     if (self.busy) return;
     if ([sender.game isEqual:self.activeGame]) return;
     self.activeGame = sender.game;
@@ -260,6 +289,20 @@ static NSString *const FFActiveGameDefaultsKey = @"FFActiveGameID";
 - (void)handleToggleForFunction:(FFFunction *)function
                            isOn:(BOOL)isOn
                             row:(FFFunctionRowView *)row {
+    if (isOn && ![FFLicense current].apiValidated) {
+        [row setOn:NO animated:YES];
+        FFLicense *license = [FFLicense current];
+        BOOL pending = license.apiValidationPending;
+        if (!pending) {
+            [license validateWithCompletion:nil];
+            pending = license.apiValidationPending;
+        }
+        [self reloadState];
+        [self presentSystemAlertWithMessage:pending
+            ? @"A validação do acesso está em andamento. Tente novamente em instantes."
+            : @"Não foi possível validar o acesso. Verifique a conexão e tente novamente."];
+        return;
+    }
     if (self.busy) {
         [row setOn:!isOn animated:YES];
         return;
@@ -348,6 +391,21 @@ static NSString *const FFActiveGameDefaultsKey = @"FFActiveGameID";
                                            handler:nil]];
     dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.18 * NSEC_PER_SEC)),
                    dispatch_get_main_queue(), ^{
+        if (self.viewIfLoaded.window != nil && self.presentedViewController == nil) {
+            [self presentViewController:alert animated:YES completion:nil];
+        }
+    });
+}
+
+- (void)presentMaintenanceAlert {
+    UIAlertController *alert = [UIAlertController
+        alertControllerWithTitle:@"Manutenção"
+                         message:@"As funções do Free Fire MAX estão em manutenção e ficarão disponíveis em breve. Use o Free Fire normal enquanto isso."
+                  preferredStyle:UIAlertControllerStyleAlert];
+    [alert addAction:[UIAlertAction actionWithTitle:@"Entendi"
+                                             style:UIAlertActionStyleDefault
+                                           handler:nil]];
+    dispatch_async(dispatch_get_main_queue(), ^{
         if (self.viewIfLoaded.window != nil && self.presentedViewController == nil) {
             [self presentViewController:alert animated:YES completion:nil];
         }
