@@ -68,16 +68,16 @@ function renderGames() {
     card.dataset.gameId = game.id;
     card.innerHTML = `
       <div class="id">${game.id}</div>
-      <label class="field"><span>bundle id</span>
+      <label class="field"><span>Bundle ID do jogo</span>
         <input class="input" data-field="bundle" value="${escapeAttribute(game.bundle)}">
       </label>
       <label class="field"><span>nome</span>
         <input class="input" data-field="name" value="${escapeAttribute(game.name)}">
       </label>
-      <label class="field"><span>root</span>
+      <label class="field"><span>Onde ficam os arquivos do jogo?</span>
         <select class="input" data-field="root">
-          <option value="data"${game.root === 'data' ? ' selected' : ''}>data (container de dados)</option>
-          <option value="bundle"${game.root === 'bundle' ? ' selected' : ''}>bundle (dentro do .app)</option>
+          <option value="data"${game.root === 'data' ? ' selected' : ''}>Container de dados do jogo (recomendado)</option>
+          <option value="bundle"${game.root === 'bundle' ? ' selected' : ''}>Dentro do aplicativo instalado (.app)</option>
         </select>
       </label>`;
     container.appendChild(card);
@@ -156,24 +156,67 @@ function renderPublishRows(container, entry) {
       ? `${published.files.length} arquivo(s) · ${new Date(published.publishedAt).toLocaleString('pt-BR')}`
       : 'nada publicado';
 
-    row.innerHTML = `
-      <span class="game">${game.name}</span>
-      <span class="meta">${meta}</span>
-      <input type="file" accept=".zip,application/zip">
-      <button class="btn small" data-action="publish">substituir</button>
-      <button class="btn small danger" data-action="unpublish"${published ? '' : ' disabled'}>remover</button>`;
+    const gameName = document.createElement('span');
+    gameName.className = 'game';
+    gameName.textContent = game.name;
+    const metaLabel = document.createElement('span');
+    metaLabel.className = 'meta';
+    metaLabel.textContent = meta;
 
-    const fileInput = $('input[type=file]', row);
-    $('[data-action="publish"]', row).addEventListener('click', () => publishPayload(entry.id, game.id, fileInput));
-    $('[data-action="unpublish"]', row).addEventListener('click', () => unpublishPayload(entry.id, game.id));
+    const picker = document.createElement('label');
+    picker.className = 'file-picker';
+    const pickerAction = document.createElement('span');
+    pickerAction.className = 'file-pick-action';
+    pickerAction.textContent = 'Escolher arquivo ZIP';
+    const fileName = document.createElement('span');
+    fileName.className = 'file-name';
+    fileName.setAttribute('aria-live', 'polite');
+    fileName.textContent = 'Toque aqui para escolher um ZIP (máx. 25 MB)';
+    const fileInput = document.createElement('input');
+    fileInput.type = 'file';
+    fileInput.accept = '.zip,application/zip,application/x-zip-compressed';
+    fileInput.setAttribute('aria-label', `Escolher arquivo ZIP para ${game.name}`);
+    picker.append(pickerAction, fileName, fileInput);
+
+    const publishButton = document.createElement('button');
+    publishButton.className = 'btn small publish-button';
+    publishButton.type = 'button';
+    publishButton.textContent = published ? 'Publicar substituição' : 'Publicar';
+    publishButton.disabled = true;
+    publishButton.addEventListener('click', () => publishPayload(entry.id, game.id, fileInput, publishButton));
+
+    const removeButton = document.createElement('button');
+    removeButton.className = 'btn small danger';
+    removeButton.type = 'button';
+    removeButton.textContent = 'remover';
+    removeButton.disabled = !published;
+    removeButton.addEventListener('click', () => unpublishPayload(entry.id, game.id));
+
+    fileInput.addEventListener('change', () => {
+      const file = fileInput.files && fileInput.files[0];
+      fileName.textContent = file ? `${file.name} · ${formatFileSize(file.size)}` : 'Toque aqui para escolher um ZIP (máx. 25 MB)';
+      publishButton.disabled = !file;
+    });
+
+    row.append(gameName, metaLabel, picker, publishButton, removeButton);
     container.appendChild(row);
   }
 }
 
-async function publishPayload(functionId, gameId, fileInput) {
+function formatFileSize(bytes) {
+  return bytes < 1024 * 1024
+    ? `${Math.max(1, Math.round(bytes / 1024))} KB`
+    : `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+async function publishPayload(functionId, gameId, fileInput, publishButton) {
   const file = fileInput.files && fileInput.files[0];
   if (!file) {
-    toast('escolha um ZIP com a árvore do payload');
+    toast('escolha o arquivo ZIP antes de publicar');
+    return;
+  }
+  if (!file.name.toLowerCase().endsWith('.zip')) {
+    toast('selecione um arquivo com extensão .zip');
     return;
   }
   if (file.size > 25 * 1024 * 1024) {
@@ -181,6 +224,8 @@ async function publishPayload(functionId, gameId, fileInput) {
     return;
   }
   try {
+    publishButton.disabled = true;
+    publishButton.textContent = 'Publicando…';
     toast('publicando…');
     const buffer = await file.arrayBuffer();
     const result = await api(`/api/admin/functions/${functionId}/files/${gameId}`, {
@@ -192,6 +237,8 @@ async function publishPayload(functionId, gameId, fileInput) {
     fileInput.value = '';
     await loadState();
   } catch (error) {
+    publishButton.disabled = false;
+    publishButton.textContent = 'Tentar novamente';
     toast(error.message);
   }
 }

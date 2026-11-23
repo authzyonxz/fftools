@@ -90,6 +90,7 @@ input, select, textarea, button { font: inherit; }
 .btn.ghost { background: transparent; color: var(--text); border: 1px solid var(--line); }
 .btn.danger { background: transparent; color: var(--accent); border: 1px solid #4a1f24; }
 .btn.small { padding: 6px 10px; font-size: 13px; }
+.btn:disabled { opacity: .45; cursor: not-allowed; }
 
 .function {
   background: var(--panel-2);
@@ -137,7 +138,65 @@ input, select, textarea, button { font: inherit; }
 }
 .publish-row .game { min-width: 120px; font-weight: 600; }
 .publish-row .meta { color: var(--muted); font-size: 12px; flex: 1; }
-.publish-row input[type=file] { color: var(--muted); font-size: 12px; }
+.file-picker {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex: 1 1 280px;
+  min-width: 0;
+  min-height: 52px;
+  padding: 7px 12px;
+  overflow: hidden;
+  background: var(--panel-2);
+  border: 1px dashed #555560;
+  border-radius: 10px;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+.file-picker:focus-within { outline: 2px solid var(--accent); outline-offset: 2px; }
+.file-pick-action {
+  flex: 0 0 auto;
+  padding: 9px 12px;
+  border-radius: 8px;
+  background: var(--text);
+  color: #0b0b0d;
+  font-size: 14px;
+  font-weight: 700;
+  pointer-events: none;
+}
+.file-name {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 13px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  pointer-events: none;
+}
+.file-picker input[type="file"] {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  display: block;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  opacity: 0;
+  cursor: pointer;
+  font-size: 16px;
+}
+.advanced-settings {
+  margin-top: 16px;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: #18181d;
+}
+.advanced-settings summary { cursor: pointer; font-weight: 600; }
+.advanced-settings summary span { color: var(--muted); font-size: 13px; font-weight: 400; }
+.advanced-settings > .muted { margin: 10px 0 0; }
+.field small { color: var(--muted); font-size: 12px; line-height: 1.4; }
 
 .function-actions { display: flex; gap: 10px; justify-content: flex-end; margin-top: 14px; }
 
@@ -160,3 +219,21 @@ input, select, textarea, button { font: inherit; }
   padding: 12px 18px; font-size: 14px; opacity: 0; pointer-events: none; transition: opacity .2s;
 }
 #toast.show { opacity: 1; }
+
+@media (max-width: 640px) {
+  .topbar { align-items: stretch; flex-direction: column; padding: 14px 16px; }
+  .topbar-actions { width: 100%; }
+  .topbar-actions input { flex: 1; min-width: 0; }
+  main { padding: 16px 12px 56px; }
+  .panel { padding: 14px; }
+  .function { padding: 12px; }
+  .function-head > * { width: 100%; }
+  .function-head .name, .function-head .group, .function-head .status { min-width: 0; }
+  .publish-row { align-items: stretch; flex-direction: column; }
+  .publish-row .game, .publish-row .meta, .file-picker, .publish-row .btn { width: 100%; }
+  .publish-row .game { min-width: 0; }
+  .file-picker { min-height: 58px; }
+  .function-actions { flex-direction: column; }
+  .function-actions .btn { width: 100%; }
+  .row.between { align-items: flex-start; }
+}

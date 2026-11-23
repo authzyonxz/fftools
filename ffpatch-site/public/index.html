@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>FFPatch · Catálogo</title>
 <base href="./">
-<link rel="stylesheet" href="styles.css">
+<link rel="stylesheet" href="styles.css?v=20261123-1">
 </head>
 <body>
 <header class="topbar">
@@ -22,7 +22,7 @@
 <main>
   <section class="panel" id="login-panel">
     <h2>acesso</h2>
-    <p class="muted">Informe o <code>ADMIN_TOKEN</code> configurado no servidor. Ele fica salvo só neste navegador.</p>
+    <p class="muted">Informe o token de acesso configurado no servidor. Ele fica salvo só neste navegador.</p>
   </section>
 
   <section class="panel hidden" id="catalog-panel">
@@ -32,11 +32,12 @@
       <button id="copy-catalog" class="btn">copiar</button>
       <a id="open-catalog" class="btn ghost" target="_blank" rel="noreferrer">abrir</a>
     </div>
-    <p class="muted">É essa URL que vai no <code>Catalog.plist</code> do app (obfuscada). Versão do catálogo: <span id="catalog-version">—</span></p>
+    <p class="muted">Esta URL é usada pelo app. Versão do catálogo: <span id="catalog-version">—</span></p>
   </section>
 
   <section class="panel hidden" id="games-panel">
-    <h2>jogos</h2>
+    <h2>jogos e identificador do app</h2>
+    <p class="muted">Configure o Bundle ID e indique onde ficam os arquivos do jogo. Na dúvida, mantenha “Container de dados”.</p>
     <div id="games-editor" class="games-editor"></div>
     <button id="save-games" class="btn">salvar jogos</button>
   </section>
@@ -59,9 +60,9 @@
   <article class="function">
     <header class="function-head">
       <div class="function-id" data-field="id"></div>
-      <input class="input name" data-field="name" placeholder="nome exibido">
-      <select class="input group" data-field="groupId"></select>
-      <select class="input status" data-field="status">
+      <input class="input name" data-field="name" placeholder="nome exibido" aria-label="Nome da função">
+      <select class="input group" data-field="groupId" aria-label="Grupo da função"></select>
+      <select class="input status" data-field="status" aria-label="Status da função">
         <option value="active">ativo</option>
         <option value="maintenance">manutenção</option>
         <option value="disabled">desativado</option>
@@ -74,40 +75,50 @@
         <input class="input" data-field="subtitle" placeholder="texto abaixo do nome">
       </label>
       <div class="field">
-        <span>jogos</span>
+        <span>jogos desta função</span>
         <div class="games" data-field="games"></div>
       </div>
-      <label class="field">
-        <span>locate.mode</span>
-        <select class="input" data-field="locateMode">
-          <option value="path-or-name">path-or-name</option>
-          <option value="path">path</option>
-          <option value="name">name</option>
-        </select>
-      </label>
-      <label class="field">
-        <span>locate.names (vírgula)</span>
-        <input class="input" data-field="locateNames" placeholder="global-metadata.dat">
-      </label>
-      <label class="field">
-        <span>locate.roots (vírgula)</span>
-        <input class="input" data-field="locateRoots" placeholder="Documents,Library">
-      </label>
-      <label class="field">
-        <span>maxMatches</span>
-        <input class="input" data-field="maxMatches" type="number" min="1" max="64" value="8">
-      </label>
     </div>
+
+    <details class="advanced-settings">
+      <summary>Opções avançadas <span>(normalmente não precisa alterar)</span></summary>
+      <p class="muted">Estas opções dizem ao app onde procurar os arquivos do jogo. Se você não tiver uma necessidade específica, deixe os valores atuais.</p>
+      <div class="grid">
+        <label class="field">
+          <span>Como localizar os arquivos</span>
+          <select class="input" data-field="locateMode">
+            <option value="path-or-name">Pelo caminho; se não achar, tenta pelo nome (recomendado)</option>
+            <option value="path">Somente pelo caminho completo</option>
+            <option value="name">Somente pelo nome do arquivo</option>
+          </select>
+        </label>
+        <label class="field">
+          <span>Nomes dos arquivos</span>
+          <input class="input" data-field="locateNames" placeholder="Ex.: global-metadata.dat">
+          <small>Use nomes exatos, separados por vírgula. Pode deixar vazio.</small>
+        </label>
+        <label class="field">
+          <span>Pastas onde procurar</span>
+          <input class="input" data-field="locateRoots" placeholder="Ex.: Documents, Library">
+          <small>Pastas iniciais dentro dos dados do jogo; vazio usa a busca padrão.</small>
+        </label>
+        <label class="field">
+          <span>Máximo de arquivos encontrados</span>
+          <input class="input" data-field="maxMatches" type="number" min="1" max="64" value="8">
+          <small>Limite da busca. O padrão é 8.</small>
+        </label>
+      </div>
+    </details>
 
     <div class="publish" data-field="publish"></div>
 
     <footer class="function-actions">
-      <button class="btn" data-action="save">salvar</button>
+      <button class="btn" data-action="save">salvar função</button>
       <button class="btn danger" data-action="delete">excluir função</button>
     </footer>
   </article>
 </template>
 
-<script src="admin.js"></script>
+<script src="admin.js?v=20261123-1"></script>
 </body>
 </html>
