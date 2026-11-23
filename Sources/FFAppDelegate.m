@@ -18,6 +18,8 @@
 
 @interface FFAppDelegate ()
 @property (nonatomic, strong) UITabBarController *tabs;
+@property (nonatomic, strong) UIViewController *contentController;
+@property (nonatomic, assign) BOOL awaitingAPIInterface;
 @property (nonatomic, strong) UIViewController *loadingController;
 @property (nonatomic, strong) FFCatalogResult *lastResult;
 @property (nonatomic, assign) BOOL syncing;
@@ -25,6 +27,8 @@
 - (void)handleAuthorizationResult:(BOOL)isValid;
 - (void)showAccessBlocked;
 - (void)retryAPIAuthorization;
+- (void)installContentController:(UIViewController *)controller;
+- (void)finishAuthorizedStartupWhenAPIIsIdle;
 @end
 
 @implementation FFAppDelegate
@@ -58,6 +62,65 @@
 }
 
 #pragma mark - Catalogue
+
+// Keep the window's presenter alive while the API displays its own interface.
+- (void)installContentController:(UIViewController *)controller {
+    UIViewController *host = self.window.rootViewController;
+    if (host == nil) {
+        host = [UIViewController new];
+        host.view.backgroundColor = [UIColor blackColor];
+        self.window.rootViewController = host;
+    }
+    UIViewController *previous = self.contentController;
+    [previous willMoveToParentViewController:nil];
+    [previous.view removeFromSuperview];
+    [previous removeFromParentViewController];
+
+    [host addChildViewController:controller];
+    controller.view.frame = host.view.bounds;
+    controller.view.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
+    // API-owned overlays stay above the application's content.
+    [host.view insertSubview:controller.view atIndex:0];
+    [controller didMoveToParentViewController:host];
+    self.contentController = controller;
+}
+
+- (BOOL)apiInterfaceIsVisible {
+    UIViewController *host = self.window.rootViewController;
+    if (host.presentedViewController != nil || host.transitionCoordinator != nil ||
+        self.contentController.presentedViewController != nil ||
+        self.contentController.transitionCoordinator != nil) return YES;
+    for (UIView *view in host.view.subviews) {
+        if (view != self.contentController.view && !view.hidden && view.alpha > 0.01) return YES;
+    }
+    for (UIWindow *window in self.window.windowScene.windows) {
+        if (window != self.window && window.isKeyWindow &&
+            !window.hidden && window.alpha > 0.01) return YES;
+    }
+    return NO;
+}
+
+- (void)finishAuthorizedStartupWhenAPIIsIdle {
+    if (!self.awaitingAPIInterface) return;
+    if (![FFLicense current].apiValidated) {
+        self.awaitingAPIInterface = NO;
+        [self showAccessBlocked];
+        return;
+    }
+    if ([self apiInterfaceIsVisible]) {
+        __weak typeof(self) weakSelf = self;
+        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.1 * NSEC_PER_SEC)),
+                       dispatch_get_main_queue(), ^{
+            [weakSelf finishAuthorizedStartupWhenAPIIsIdle];
+        });
+        return;
+    }
+    self.awaitingAPIInterface = NO;
+    self.startupServicesStarted = YES;
+    [self showLoadingWithText:@"sincronizando catálogo"];
+    [self startCatalogSyncWithTimeout:12.0];
+    [self startSandboxInBackground];
+}
 
 - (void)showLoadingWithText:(NSString *)text {
     UIViewController *controller = [UIViewController new];
@@ -98,7 +161,7 @@
     ]];
 
     self.loadingController = controller;
-    self.window.rootViewController = controller;
+    [self installContentController:controller];
 }
 
 - (void)showAccessBlocked {
@@ -157,7 +220,7 @@
     ]];
 
     self.loadingController = controller;
-    self.window.rootViewController = controller;
+    [self installContentController:controller];
 }
 
 - (void)retryAPIAuthorization {
@@ -172,16 +235,16 @@
         [self showAccessBlocked];
         return;
     }
-    if (self.startupServicesStarted) return;
-
-    self.startupServicesStarted = YES;
-    [self showLoadingWithText:@"sincronizando catálogo"];
-    [self startCatalogSyncWithTimeout:12.0];
-    [self startSandboxInBackground];
+    if (self.startupServicesStarted || self.awaitingAPIInterface) return;
+    self.awaitingAPIInterface = YES;
+    // Allow the API callback to finish scheduling its success presentation.
+    dispatch_async(dispatch_get_main_queue(), ^{
+        [self finishAuthorizedStartupWhenAPIIsIdle];
+    });
 }
 
 - (void)startCatalogSyncWithTimeout:(NSTimeInterval)timeout {
-    if (![FFLicense current].apiValidated) return;
+    if (!self.startupServicesStarted || ![FFLicense current].apiValidated) return;
     if (self.syncing) return;
     self.syncing = YES;
     dispatch_async(dispatch_get_global_queue(QOS_CLASS_USER_INITIATED, 0), ^{
@@ -208,7 +271,7 @@
 }
 
 - (void)installRootWithManifest:(FFManifest *)manifest result:(FFCatalogResult *)result {
-    if (![FFLicense current].apiValidated) return;
+    if (!self.startupServicesStarted || ![FFLicense current].apiValidated) return;
     if (manifest == nil) manifest = [FFManifest emptyManifest];
     [FFPatchEngine sharedEngine].manifest = manifest;
 
@@ -219,7 +282,7 @@
     }
     self.tabs = tabs;
 
-    self.window.rootViewController = tabs;
+    [self installContentController:tabs];
 
     if (result != nil) {
         FFLog(@"catalog: instalado v%@ · %lu grupo(s) · cache=%d · erro=%@",
