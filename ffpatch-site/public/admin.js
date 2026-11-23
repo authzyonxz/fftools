@@ -167,15 +167,14 @@ function renderPublishRows(container, entry) {
     picker.className = 'file-picker';
     const pickerAction = document.createElement('span');
     pickerAction.className = 'file-pick-action';
-    pickerAction.textContent = 'Escolher arquivo ZIP';
+    pickerAction.textContent = 'Escolher arquivo';
     const fileName = document.createElement('span');
     fileName.className = 'file-name';
     fileName.setAttribute('aria-live', 'polite');
-    fileName.textContent = 'Toque aqui para escolher um ZIP (máx. 25 MB)';
+    fileName.textContent = 'Toque aqui para escolher um arquivo (máx. 25 MB)';
     const fileInput = document.createElement('input');
     fileInput.type = 'file';
-    fileInput.accept = '.zip,application/zip,application/x-zip-compressed';
-    fileInput.setAttribute('aria-label', `Escolher arquivo ZIP para ${game.name}`);
+    fileInput.setAttribute('aria-label', `Escolher arquivo para ${game.name}`);
     picker.append(pickerAction, fileName, fileInput);
 
     const publishButton = document.createElement('button');
@@ -194,7 +193,7 @@ function renderPublishRows(container, entry) {
 
     fileInput.addEventListener('change', () => {
       const file = fileInput.files && fileInput.files[0];
-      fileName.textContent = file ? `${file.name} · ${formatFileSize(file.size)}` : 'Toque aqui para escolher um ZIP (máx. 25 MB)';
+      fileName.textContent = file ? `${file.name} · ${formatFileSize(file.size)}` : 'Toque aqui para escolher um arquivo (máx. 25 MB)';
       publishButton.disabled = !file;
     });
 
@@ -212,26 +211,29 @@ function formatFileSize(bytes) {
 async function publishPayload(functionId, gameId, fileInput, publishButton) {
   const file = fileInput.files && fileInput.files[0];
   if (!file) {
-    toast('escolha o arquivo ZIP antes de publicar');
-    return;
-  }
-  if (!file.name.toLowerCase().endsWith('.zip')) {
-    toast('selecione um arquivo com extensão .zip');
+    toast('escolha um arquivo antes de publicar');
     return;
   }
   if (file.size > 25 * 1024 * 1024) {
-    toast('ZIP acima de 25 MB');
+    toast('arquivo acima de 25 MB');
     return;
   }
   try {
     publishButton.disabled = true;
     publishButton.textContent = 'Publicando…';
     toast('publicando…');
-    const buffer = await file.arrayBuffer();
+    const fileBytes = new Uint8Array(await file.arrayBuffer());
+    const uploadBody = FFSingleFileZip.createSingleFileZip(file.name, fileBytes);
+    if (uploadBody.byteLength > 25 * 1024 * 1024) {
+      publishButton.disabled = false;
+      publishButton.textContent = 'Publicar';
+      toast('arquivo acima do limite de 25 MB após preparação');
+      return;
+    }
     const result = await api(`/api/admin/functions/${functionId}/files/${gameId}`, {
       method: 'POST',
       headers: { 'content-type': 'application/zip' },
-      body: buffer
+      body: uploadBody
     });
     toast(`${result.files.length} arquivo(s) publicados em ${functionId}/${gameId}`);
     fileInput.value = '';
@@ -319,7 +321,7 @@ async function createFunction() {
       })
     });
     await loadState();
-    toast('função criada — publique um ZIP para ela aparecer no catálogo');
+    toast('função criada — publique um arquivo para ela aparecer no catálogo');
   } catch (error) {
     toast(error.message);
   }

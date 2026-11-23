@@ -15,6 +15,8 @@ const path = require('node:path');
 const zlib = require('node:zlib');
 
 const { decryptFile, sha256Hex } = require('../lib/crypto');
+const { extractZip } = require('../lib/zip');
+const { createSingleFileZip } = require('../public/single-file-zip');
 
 const SECRET = 'selftest-master-secret-32-bytes!!';
 const TOKEN = 'selftest-admin-token';
@@ -112,6 +114,26 @@ async function main() {
     if (catalogEmpty.groups.length !== 0) fail('catálogo deveria começar sem funções publicadas');
 
     // ---- publish -----------------------------------------------------------
+    const individualName = 'patch_data.bin';
+    const individualData = Buffer.from([0, 1, 2, 127, 128, 254, 255]);
+    const individualZip = Buffer.from(createSingleFileZip(individualName, individualData));
+    const extracted = extractZip(individualZip);
+    if (extracted.length !== 1 || extracted[0].path !== individualName) {
+      fail('empacotador do painel deveria gerar exatamente um arquivo na raiz');
+    }
+    if (!extracted[0].data.equals(individualData)) fail('empacotador alterou os bytes do arquivo');
+
+    const individualUpload = await fetch(`${origin}/api/admin/functions/0x1001/files/freefiremax`, {
+      method: 'POST',
+      headers: { 'x-admin-token': TOKEN, 'content-type': 'application/zip' },
+      body: individualZip
+    });
+    if (!individualUpload.ok) fail(`upload individual falhou: ${individualUpload.status} ${await individualUpload.text()}`);
+    const individualResult = await individualUpload.json();
+    if (individualResult.files.length !== 1 || individualResult.files[0].path !== individualName) {
+      fail('servidor não publicou o arquivo individual corretamente');
+    }
+
     const payload = makeZip([
       { name: 'Documents/ffpatch/hs_alto.cfg', data: 'mode=hs_alto\n' },
       { name: 'Documents/ffpatch/hs_alto.json', data: '{"function":"0x1001"}\n' }
@@ -134,6 +156,10 @@ async function main() {
     if (!functionEntry) fail('0x1001 ausente no catálogo após publicar');
     const assets = functionEntry.assets.freefireth;
     if (!assets || assets.length !== 2) fail('assets do freefireth errados');
+    const individualAssets = functionEntry.assets.freefiremax;
+    if (!individualAssets || individualAssets.length !== 1 || individualAssets[0].path !== individualName) {
+      fail('asset publicado pelo fluxo de arquivo individual está errado');
+    }
     if (functionEntry.games.join(',') !== 'freefireth,freefiremax') fail('games do seed errados');
 
     // ---- download + decrypt (mirrors the iOS client) -----------------------
@@ -146,6 +172,13 @@ async function main() {
       if (sha256Hex(plain) !== asset.sha256) fail(`sha256 divergente em ${asset.path}`);
       if (plain.length !== asset.size) fail(`tamanho divergente em ${asset.path}`);
     }
+    const individualPackResponse = await fetch(individualAssets[0].url);
+    if (!individualPackResponse.ok) fail(`download do arquivo individual falhou: ${individualPackResponse.status}`);
+    const individualPack = Buffer.from(await individualPackResponse.arrayBuffer());
+    const individualPlain = decryptFile(individualPack, {
+      secret: SECRET, functionId: '0x1001', gameId: 'freefiremax'
+    });
+    if (!individualPlain.equals(individualData)) fail('bytes publicados pelo fluxo individual divergiram após decifrar');
 
     // wrong secret must fail
     const firstPack = Buffer.from(await (await fetch(assets[0].url)).arrayBuffer());
@@ -187,10 +220,15 @@ async function main() {
       headers: { 'x-admin-token': TOKEN }
     });
     if (!remove.ok) fail('unpublish falhou');
+    const removeIndividual = await fetch(`${origin}/api/admin/functions/0x1001/files/freefiremax`, {
+      method: 'DELETE',
+      headers: { 'x-admin-token': TOKEN }
+    });
+    if (!removeIndividual.ok) fail('unpublish do arquivo individual falhou');
     const catalogAfter = await (await fetch(`${origin}/api/catalog`)).json();
     if (catalogAfter.groups.length !== 0) fail('catálogo deveria ficar vazio após unpublish');
 
-    console.log('OK — catálogo, upload ZIP, FPP1, HMAC, status, games, auth e unpublish');
+    console.log('OK — arquivo individual, upload ZIP legado, catálogo, FPP1, HMAC, status, games, auth e unpublish');
     stop();
     process.exit(0);
   } catch (error) {

@@ -40,19 +40,22 @@ copiar essa pasta.
 - **funções**: nome, subtítulo, grupo, status (`ativo`, `manutenção`,
   `desativado`), jogos (`Free Fire Normal` / `Free Fire Max`), `locate`
   (`path`, `name`, `path-or-name`, nomes, raízes, `maxMatches`).
-- **payload**: upload de ZIP com a árvore relativa ao container. Substituir =
+- **payload**: selecione um arquivo comum no painel; ele é preparado automaticamente
+  para a API existente, sem pedir ao usuário que crie ou escolha um ZIP. O app procura
+  primeiro pelo caminho e também aceita localizar pelo nome do arquivo. Substituir =
   mesma função + mesmo jogo; remover = botão *remover*.
 - **jogos**: bundle ID, nome e root (`data` ou `bundle`).
 - **auditoria**: toda ação registrada com hora.
 
-ZIP esperado (caminho relativo dentro do container do jogo):
+Para um arquivo individual, o nome selecionado é preservado. Exemplo:
 
 ```
-Documents/ffpatch/hs_alto.cfg
-Documents/ffpatch/hs_alto.json
+patch_data.bin
 ```
 
-O servidor valida o ZIP (sem `..`, sem path absoluto, sem zip bounce), cifra
+O servidor continua aceitando ZIP pela API para compatibilidade e múltiplos arquivos;
+no painel, esse empacotamento é feito automaticamente para um único arquivo.
+O servidor valida os pacotes (sem `..`, sem path absoluto, sem zip bounce), cifra
 cada arquivo com FPP1, calcula SHA-256, faz round-trip de verificação e só então
 publica. Função sem payload não aparece no catálogo.
 
@@ -76,7 +79,7 @@ Admin (header `x-admin-token: <ADMIN_TOKEN>`):
 | `POST /api/admin/functions/:id/status` | `{status: active\|maintenance\|disabled}` |
 | `POST /api/admin/functions/:id/games` | `{games: ["freefireth", ...]}` |
 | `POST /api/admin/functions/:id/locate` | `{mode, names, roots, maxMatches}` |
-| `POST /api/admin/functions/:id/files/:gameId` | corpo = ZIP bruto (application/zip) |
+| `POST /api/admin/functions/:id/files/:gameId` | corpo = ZIP bruto (`application/zip`); o painel empacota automaticamente o arquivo selecionado |
 | `DELETE /api/admin/functions/:id/files/:gameId` | despublica |
 | `POST /api/admin/games` | `{games:[{id,name,bundle,root,icon}]}` |
 | `GET /api/admin/audit` | últimas 400 ações |
