@@ -39,7 +39,7 @@ ffpatch_CFLAGS = -fobjc-arc -std=gnu17 -fblocks -fvisibility=hidden -DFF_ENABLE_
 
 
 
-ffpatch_LDFLAGS = -Wl,-x -Wl,-dead_strip -ObjC -lz \
+ffpatch_LDFLAGS = -Wl,-x -Wl,-dead_strip -ObjC -lz -lc++ \
                   $(THEOS_PROJECT_DIR)/Sources/Vendor/LogosAPI/libAPIClient.a
 
 include $(THEOS_MAKE_PATH)/library.mk

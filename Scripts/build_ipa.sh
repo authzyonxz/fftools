@@ -68,7 +68,7 @@ done
     "$ROOT/Sources/Vendor/LogosAPI/libAPIClient.a" \
     -framework UIKit -framework Foundation -framework CoreGraphics \
     -framework QuartzCore -framework CoreFoundation -framework IOSurface \
-    -framework Security -framework CFNetwork -framework SystemConfiguration -lz
+    -framework Security -framework CFNetwork -framework SystemConfiguration -lz -lc++
 
 # Strip local symbols from the shipped dylib (best effort).
 if command -v xcrun >/dev/null 2>&1; then

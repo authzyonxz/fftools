@@ -154,12 +154,12 @@ def check_logos_api_integration():
         ),
         "Scripts/build_ipa.sh": (
             "generate_api_auth.py", "libAPIClient.a", "Sources/Vendor/LogosAPI",
-            "-framework CFNetwork", "-framework SystemConfiguration", "APIAuth.plist",
+            "-framework CFNetwork", "-framework SystemConfiguration", "-lc++", "APIAuth.plist",
         ),
         "Scripts/package_ipa_theos.sh": ("generate_api_auth.py", "APIAuth.plist"),
         "Makefile": (
             "libAPIClient.a", "Sources/Vendor/LogosAPI", "CFNetwork",
-            "SystemConfiguration", "-ObjC", "-lz",
+            "SystemConfiguration", "-ObjC", "-lz", "-lc++",
         ),
         ".github/workflows/build.yml": (
             "LOGOS_API_TOKEN: ${{ secrets.LOGOS_API_TOKEN }}", "APIAuth.plist",
