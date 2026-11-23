@@ -1,14 +1,15 @@
 name: build-ipa
 
 on:
-  push:
-    branches: [main]
-  pull_request:
   workflow_dispatch:
+
+permissions:
+  contents: read
 
 jobs:
   ipa:
     runs-on: macos-26
+    timeout-minutes: 35
     steps:
       - uses: actions/checkout@v4
 
@@ -17,19 +18,45 @@ jobs:
           xcodebuild -version
           xcrun --sdk iphoneos --show-sdk-path
 
+      - name: Configure remote catalog
+        env:
+          CATALOG_BASE_URL: https://keyauthv2.org/3106
+          MASTER_SECRET: ${{ secrets.MASTER_SECRET }}
+        run: |
+          set -eu
+          test -n "$MASTER_SECRET" || { echo "Missing repository secret MASTER_SECRET" >&2; exit 1; }
+          python3 Scripts/protect_config.py --url "$CATALOG_BASE_URL" --secret-env MASTER_SECRET
+          python3 - <<'PY'
+          import base64
+          import os
+          import plistlib
+          from pathlib import Path
+          key = 0x5B
+          def unmask(value):
+              data = base64.b64decode(value)
+              return bytes(byte ^ key ^ ((index * 31) & 0xFF) for index, byte in enumerate(data)).decode()
+          plist = plistlib.loads(Path("Resources/Catalog.plist").read_bytes())
+          assert unmask(plist["baseURLMasked"]) == os.environ["CATALOG_BASE_URL"].rstrip("/")
+          assert unmask(plist["masterSecretMasked"]) == os.environ["MASTER_SECRET"]
+          print("Catalog URL and secret match; both remain masked in the plist.")
+          PY
+
       - name: Build unsigned IPA
         run: |
           chmod +x Scripts/build_ipa.sh
           ./Scripts/build_ipa.sh
 
-      - name: Verify bundle layout
+      - name: Verify bundle layout and unsigned state
         run: |
           set -e
           APP=build/Payload/FFPatch.app
           test -x "$APP/FFPatch"
           test -f "$APP/Frameworks/ffpatch.dylib"
           test -f "$APP/Info.plist"
-          test -f "$APP/Payloads/manifest.json"
+          test -f "$APP/Catalog.plist"
+          test ! -d "$APP/_CodeSignature"
+          test ! -f "$APP/embedded.mobileprovision"
+          echo "IPA is unsigned and contains its masked catalog configuration."
           echo "--- linked images ---"
           otool -L "$APP/Frameworks/ffpatch.dylib"
           echo "--- architectures ---"
@@ -41,3 +68,4 @@ jobs:
           name: FFPatch-unsigned-ipa
           path: build/*.ipa
           if-no-files-found: error
+          retention-days: 1

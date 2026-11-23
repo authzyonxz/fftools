@@ -64,6 +64,11 @@ typedef NS_ENUM(NSInteger, FFLocateMode) {
 @property (nonatomic, copy, nullable) NSArray<NSString *> *locateRoots;
 /*! Hard cap on replaced files per payload file (default 8). */
 @property (nonatomic, assign) NSUInteger locateMaxMatches;
+
+/*! Games this function is published for (empty = all games). */
+@property (nonatomic, copy) NSArray<NSString *> *supportedGames;
+/*! "active" | "maintenance" | "disabled" (from the catalogue). */
+@property (nonatomic, copy) NSString *publicationStatus;
 @end
 
 @interface FFGroup : NSObject
@@ -81,6 +86,14 @@ typedef NS_ENUM(NSInteger, FFLocateMode) {
 
 + (nullable instancetype)loadFromBundle:(nullable NSBundle *)bundle
                                   error:(NSError *_Nullable *_Nullable)error;
+
+/*! Builds a manifest from an in-memory dictionary (used by the catalogue client). */
++ (nullable instancetype)manifestFromDictionary:(NSDictionary *)dictionary
+                                    payloadRoot:(NSString *)payloadRoot
+                                          error:(NSError *_Nullable *_Nullable)error;
+
+/*! Manifest with the two Free Fire games and no functions (offline first run). */
++ (instancetype)emptyManifest;
 
 - (nullable FFGame *)gameWithID:(NSString *)gameID;
 - (nullable FFFunction *)functionWithID:(NSString *)funcID;

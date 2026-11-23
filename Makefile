@@ -26,7 +26,7 @@ ffpatch_FRAMEWORKS = UIKit Foundation CoreGraphics QuartzCore CoreFoundation IOS
 # extra para resolver os headers do kexploit (IOSurfaceRef.h).
 ffpatch_PRIVATE_FRAMEWORKS = IOSurface
 
-ffpatch_CFLAGS = -fobjc-arc -std=gnu17 -fblocks \
+ffpatch_CFLAGS = -fobjc-arc -std=gnu17 -fblocks -fvisibility=hidden -DFF_ENABLE_ANTIDEBUG=1 \
                  -I$(THEOS_PROJECT_DIR)/Sources \
                  -I$(THEOS_PROJECT_DIR)/Sources/Vendor \
                  -Wno-deprecated-declarations \
@@ -36,6 +36,8 @@ ffpatch_CFLAGS = -fobjc-arc -std=gnu17 -fblocks \
                  -Wno-incompatible-pointer-types
 
 
+
+ffpatch_LDFLAGS = -Wl,-x -Wl,-dead_strip
 
 include $(THEOS_MAKE_PATH)/library.mk
 

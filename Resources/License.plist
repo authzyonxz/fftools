@@ -13,9 +13,9 @@
     <key>package</key>
     <string>com.daddy.ffpatch</string>
     <key>version</key>
-    <string>1.0.0</string>
+    <string>1.1.0</string>
     <key>build</key>
-    <string>1</string>
+    <string>2</string>
     <key>compatible</key>
     <array>
         <string>iOS 17.0–17.7.x</string>

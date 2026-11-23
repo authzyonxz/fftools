@@ -1,131 +1,102 @@
-# Payloads crus — guia de conteúdo
+# Publicando funções — site + payload cru
 
-O motor não tem formato de pacote. O diretório da função **é** o container:
-cada arquivo é copiado byte a byte para o mesmo caminho relativo dentro do
-container do jogo escolhido.
+A IPA não leva payload nenhum. Tudo é publicado no site (`work/ffpatch-site`),
+que serve os arquivos cifrados em FPP1; o app baixa, decifra e aplica no
+container do jogo.
 
-## Nomenclatura
+## 1. Subir um payload
 
-```
-Resources/Payloads/
-├── manifest.json
-├── <payloadDirectory>/
-│   └── <gameID>/
-│       └── <caminho relativo ao container>
-```
-
-Exemplo real (HS ALTO no Free Fire Normal):
+No painel (`/` → token → função → jogo → **substituir**), envie um ZIP onde a
+árvore **é** o caminho relativo dentro do container:
 
 ```
-Resources/Payloads/hs_alto/freefireth/Documents/ffpatch/hs_alto.cfg
-        ↓ apply("0x1001", "freefireth")
-/var/mobile/Containers/Data/Application/<uuid>/Documents/ffpatch/hs_alto.cfg
+Documents/ffpatch/hs_alto.cfg
+Documents/ffpatch/hs_alto.json
 ```
 
-O `gameID` casa com o campo `id` de `manifest.json`; o `bundle` do jogo é o que
-resolve o container. `payloadDirectory` é o campo `payload` da função (se
-ausente, usa o próprio id).
+Regras que o servidor valida antes de publicar:
 
-## Regras do motor (o que ele recusa)
+- sem caminho absoluto, sem `..`, sem `__MACOSX`, sem entrada oculta;
+- arquivo não vazio;
+- o ZIP precisa abrir (stored ou deflate);
+- o pack cifrado passa por round-trip de decifragem e SHA-256 antes de entrar
+  no catálogo.
 
-- caminho absoluto, `..`, componente vazio → `FFErrorPathEscapesContainer`
-- qualquer componente que seja symlink → `FFErrorSymlinkRefused`
-- alvo que já é diretório → `FFErrorTargetIsDirectory`
-- dois arquivos do payload caindo no mesmo alvo → `FFErrorDuplicateTarget`
-- arquivo de payload vazio → `FFErrorInvalidPayload`
-- payload ausente para o jogo → `FFErrorPayloadMissing`
+Tamanho máximo de upload: 25 MB (`MAX_UPLOAD_BYTES`).
 
-Symlinks dentro do payload são ignorados na enumeração (não copiados).
+## 2. Descobrir o caminho certo
 
-## Descoberta do alvo: caminho x nome
+O arquivo alvo mora em
+`/var/mobile/Containers/Data/Application/<uuid>/` (container de dados) ou dentro
+do `.app` instalado (bundle). O caminho relativo é o que vem depois da raiz.
 
-Cada função declara no manifest como o payload encontra o alvo dentro do container:
+Se você não sabe o caminho (muda entre versões/builds do jogo), use a varredura:
 
 ```json
-"locate": { "mode": "path-or-name", "names": ["global-metadata.dat"], "roots": ["Documents"], "maxMatches": 8 }
+"locate": { "mode": "name", "names": ["global-metadata.dat"], "maxMatches": 8 }
 ```
 
-- `path` — o caminho relativo do payload é o caminho exato no container (cria se faltar).
-- `name` — o app varre o container, acha todo arquivo com esse nome e substitui
-  todos; se não achar nenhum, retorna erro `FFErrorTargetNotFound` com o total de
-  entradas varridas.
-- `path-or-name` — tenta o caminho exato; se o arquivo ainda não existe, varre por
-  nome e substitui os matches; se não achar nada, cria o caminho declarado (é o
-  que mantém os payloads-marcador funcionando).
+- `path`: o caminho do ZIP é exato e obrigatório (cria se faltar);
+- `name`: o app varre o container e substitui **todos** os arquivos com esse
+  nome; zero matches = erro `Arquivo não encontrado no jogo`;
+- `path-or-name`: tenta o caminho exato; se não existe, varre; se não acha nada,
+  cria o caminho declarado.
 
-Regras da varredura: BFS a partir da raiz do container (ou de `locate.roots`),
-pula `Library/Caches`, `tmp`, `SplashBoard`, `Saved Application State`, `Logs`,
+Regras da varredura: BFS na raiz do container (ou em `locate.roots`), pula
+`Library/Caches`, `tmp`, `SplashBoard`, `Saved Application State`, `Logs`,
 profundidade 8, teto de 400.000 entradas, até `maxMatches` alvos, nome sem
-diferenciar maiúscula, symlink nunca alvo. `names[i]` corresponde ao i-ésimo
-arquivo do payload (ordem alfabética); sem `names`, vale o nome do próprio arquivo.
+diferenciar maiúsculas, symlink nunca é alvo.
 
-Se o alvo estiver no `.app` e não no container de dados, use `"root": "bundle"`
-no jogo — a varredura acontece no bundle container.
-## Como trocar os marcadores pelo mod real
+## 3. Escolher o jogo
 
-1. Onde o mod mora: o arquivo original do container que precisa ser
-   substituído (ex.: um `.dat`, `.cfg`, `.json`, `.plist` ou binário qualquer).
-2. Descubra o caminho **relativo ao container** dele. No jogo instalado:
-   `/var/mobile/Containers/Data/Application/<uuid>/` é a raiz — o que vem depois
-   é o caminho relativo (ex.: `Documents/algum/arquivo.bin`).
-3. Coloque o arquivo do mod no payload correspondente:
+Cada função tem a lista de jogos publicados:
 
-```bash
-# HS ALTO, Free Fire Normal
-mkdir -p Resources/Payloads/hs_alto/freefireth/Documents/algum
-cp mod_hs_alto.bin Resources/Payloads/hs_alto/freefireth/Documents/algum/arquivo.bin
+- `freefireth` → `com.dts.freefireth` (Free Fire Normal)
+- `freefiremax` → `com.dts.freefiremax` (Free Fire Max)
 
-# mesmo mod para o MAX
-mkdir -p Resources/Payloads/hs_alto/freefiremax/Documents/algum
-cp mod_hs_alto.bin Resources/Payloads/hs_alto/freefiremax/Documents/algum/arquivo.bin
+Publicar só no Normal: marque apenas `Free Fire Normal` no cartão da função.
+A mesma função pode ter payloads diferentes por jogo (um ZIP por jogo). O app
+mostra a linha só no card do jogo correspondente e aplica no bundle daquele jogo.
+
+## 4. Manutenção, substituição e remoção
+
+| Ação no painel | Efeito no app |
+| --- | --- |
+| status `ativo` | linha normal, toggle liberado |
+| status `manutenção` | linha aparece como `EM MANUTENÇÃO`, toggle desligado |
+| status `desativado` | função some do catálogo |
+| **substituir** (upload novo ZIP) | próxima sincronização baixa a versão nova (SHA-256 muda, cache é refeito) |
+| **remover** payload de um jogo | função some daquele jogo; `apply` em andamento continua válido |
+| excluir função | some do catálogo; payloads apagados do servidor |
+
+O app tem **SINCRONIZAR CATÁLOGO** no Perfil; sem tocar, ele já sincroniza no
+boot e usa cache local se estiver offline.
+
+## 5. Bundle `bundle` (alvo dentro do `.app`)
+
+Se o alvo do mod está dentro do `.app` instalado (caso de metadados de engine),
+marque `root = bundle` no jogo (painel → jogos). O app resolve o bundle
+container e a varredura acontece lá dentro. Depende do backend enxergar bundle
+container — em `bad_query` (iOS 26.0–26.6.1) isso é limitado.
+
+## 6. Onde o app guarda o que baixou
+
+```
+Application Support/FFPatch/Catalog/<função>/<jogo>/<caminho>
+Application Support/FFPatch/Catalog/catalog.json          (cache do catálogo)
+Application Support/FFPatch/Transactions/...              (backups do apply)
 ```
 
-4. Rebuild (`Scripts/build_ipa.sh`). Os arquivos-marcador `.cfg`/`.json` podem
-   ficar ou sair — são inofensivos, mas se o mod não os usa, remova para a
-   injeção tocar só o que interessa.
+Nada disso fica no bundle do app (o que está na IPA é imutável e auditável com
+`unzip -l`). A cópia decifrada existe só para o apply/restore; **RESTAURAR
+ORIGINAIS** devolve os bytes do container e o backup continua em `Transactions/`.
 
-Um payload pode ter **vários arquivos** e **subdiretórios**: o motor aplica
-todos na mesma transação, com um único rollback.
+## 7. Problemas comuns
 
-## Adicionar uma função nova
-
-`manifest.json`:
-
-```json
-{
-  "id": "0x1006",
-  "name": "NO RECOIL",
-  "subtitle": "Sem recuo na mira.",
-  "payload": "no_recoil"
-}
-```
-
-Depois crie `Resources/Payloads/no_recoil/<gameID>/<caminho>`.
-O ID aparece no alerta de STATUS (`ID 0x1006 · NO RECOIL …`) e nos recibos.
-
-## Grupos exclusivos
-
-`"exclusive": true` no grupo faz o app restaurar as irmãs antes de aplicar a nova
-(posição de HS é mutuamente exclusiva). O holograma não é exclusivo — pode ficar
-ligado junto com um HS.
-
-## Root `bundle`
-
-Se o alvo do mod não é o container de dados e sim o `.app` instalado, troque no
-manifest do jogo:
-
-```json
-{ "id": "freefireth", "bundle": "com.dts.freefireth", "root": "bundle" }
-```
-
-O `FFContainerStore` resolve o bundle container (MCM classe 1 + varredura de
-`/var/containers/Bundle/Application`) e o caminho relativo passa a contar a
-partir do `.app`. Depende do backend enxergar o bundle container — em
-`bad_query` (26.0–26.6.1) esse caminho é limitado; o padrão do repo é `data`.
-
-## Voltar tudo ao original
-
-Aba **Perfil → RESTAURAR ORIGINAIS** (ou desligar cada toggle). O restore usa os
-bytes guardados em `Library/Application Support/FFPatch/Transactions/...`;
-se o jogo foi reinstalado, o fingerprint do container muda e o motor recusa
-escrever no container novo em vez de arriscar estado inconsistente.
+| sintoma no app | causa | correção |
+| --- | --- | --- |
+| `Nenhuma função publicada` | nenhuma função com payload publicado | publique um ZIP e sincronize |
+| `Arquivo não encontrado no jogo` | `locate.mode = name` não achou o nome | ajuste `names`/`roots` no painel |
+| `Verificação falhou` | `MASTER_SECRET` do app diferente do servidor | rode `protect_config.py` com o mesmo segredo e rebuild |
+| `Sem permissão de acesso` | backend não ativo (App Group ausente, device não suportado) | veja a aba Perfil (backend/versão) |
+| linha em `EM MANUTENÇÃO` | status publicado assim | mude para `ativo` no painel |

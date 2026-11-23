@@ -56,7 +56,8 @@ cp "$DYLIB" "$APP/Frameworks/ffpatch.dylib"
 
 cp "$ROOT/Resources/Info.plist" "$APP/Info.plist"
 cp "$ROOT/Resources/License.plist" "$APP/License.plist"
-cp -R "$ROOT/Resources/Payloads" "$APP/Payloads"
+cp "$ROOT/Resources/Catalog.plist" "$APP/Catalog.plist"
+# Sem Resources/Payloads: payloads vêm do catálogo remoto (FPP1 cifrado).
 
 for asset in "$ROOT"/Resources/Assets/*.png; do
     cp "$asset" "$APP/$(basename "$asset")"
@@ -65,10 +66,6 @@ done
 ICONSET="$ROOT/Resources/Assets.xcassets/AppIcon.appiconset"
 cp "$ICONSET/Icon-60@2x.png" "$APP/AppIcon60x60@2x.png"
 cp "$ICONSET/Icon-60@3x.png" "$APP/AppIcon60x60@3x.png"
-cp "$ICONSET/Icon-40@2x.png" "$APP/AppIcon40x40@2x.png"
-cp "$ICONSET/Icon-40@3x.png" "$APP/AppIcon40x40@3x.png"
-cp "$ICONSET/Icon-29@2x.png" "$APP/AppIcon29x29@2x.png"
-cp "$ICONSET/Icon-29@3x.png" "$APP/AppIcon29x29@3x.png"
 cp "$ICONSET/Icon-1024.png" "$APP/iTunesArtwork@2x.png"
 
 printf 'APPL????' > "$APP/PkgInfo"
@@ -82,9 +79,13 @@ else
 fi
 
 echo "== checando layout"
-for required in "$APP/FFPatch" "$APP/Frameworks/ffpatch.dylib" "$APP/Info.plist" "$APP/Payloads/manifest.json"; do
+for required in "$APP/FFPatch" "$APP/Frameworks/ffpatch.dylib" "$APP/Info.plist" "$APP/Catalog.plist"; do
     [[ -e "$required" ]] || { echo "erro: falta $required" >&2; exit 1; }
 done
+
+if command -v strip >/dev/null 2>&1; then
+    strip -x "$APP/Frameworks/ffpatch.dylib" 2>/dev/null || true
+fi
 
 if command -v file >/dev/null 2>&1; then
     file "$APP/FFPatch" | head -n 1

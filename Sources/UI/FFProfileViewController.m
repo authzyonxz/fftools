@@ -11,6 +11,7 @@
 #import "FFPatchEngine.h"
 #import "FFSandbox.h"
 #import "FFCore.h"
+#import "FFCatalogClient.h"
 
 #pragma mark - Value row
 
@@ -158,10 +159,25 @@
     for (FFGame *game in self.manifest.games) {
         applied += [self.engine appliedFunctionIDsForGame:game].count;
     }
+    NSString *catalogPath = [[[FFCatalogClient sharedClient] cacheRoot]
+        stringByAppendingPathComponent:@"catalog.json"];
+    NSData *catalogData = [NSData dataWithContentsOfFile:catalogPath];
+    NSDictionary *catalogInfo = nil;
+    if (catalogData.length > 0) {
+        id parsed = [NSJSONSerialization JSONObjectWithData:catalogData options:0 error:NULL];
+        if ([parsed isKindOfClass:[NSDictionary class]]) catalogInfo = parsed;
+    }
+    NSString *catalogVersion = catalogInfo[@"version"] != nil
+        ? [NSString stringWithFormat:@"v%@", catalogInfo[@"version"]] : @"—";
+    NSString *catalogDate = [catalogInfo[@"updatedAt"] isKindOfClass:[NSString class]]
+        ? catalogInfo[@"updatedAt"] : @"—";
+
     NSArray<FFValueRowView *> *patchRows = @[
         [[FFValueRowView alloc] initWithTitle:@"Injeções ativas"
                                         value:[NSString stringWithFormat:@"%lu", (unsigned long)applied]
                                    monospaced:YES],
+        [[FFValueRowView alloc] initWithTitle:@"Catálogo" value:catalogVersion monospaced:YES],
+        [[FFValueRowView alloc] initWithTitle:@"Catálogo atualizado em" value:catalogDate monospaced:NO],
         [[FFValueRowView alloc] initWithTitle:@"Log"
                                         value:FFLogFilePath().lastPathComponent
                                    monospaced:YES],
@@ -169,6 +185,18 @@
     [stack addArrangedSubview:[self cardWithRows:patchRows]];
 
     // ---- actions -----------------------------------------------------------
+    UIButton *syncButton = [UIButton buttonWithType:UIButtonTypeSystem];
+    syncButton.translatesAutoresizingMaskIntoConstraints = NO;
+    [syncButton setTitle:@"SINCRONIZAR CATÁLOGO" forState:UIControlStateNormal];
+    syncButton.titleLabel.font = [UIFont systemFontOfSize:15 weight:UIFontWeightSemibold];
+    [syncButton setTitleColor:[FFTheme primaryText] forState:UIControlStateNormal];
+    syncButton.backgroundColor = [FFTheme card];
+    syncButton.layer.cornerRadius = 14;
+    syncButton.layer.cornerCurve = kCACornerCurveContinuous;
+    [syncButton.heightAnchor constraintEqualToConstant:48].active = YES;
+    [syncButton addTarget:self action:@selector(syncCatalogTapped) forControlEvents:UIControlEventTouchUpInside];
+    [stack addArrangedSubview:syncButton];
+
     UIButton *restoreButton = [UIButton buttonWithType:UIButtonTypeSystem];
     restoreButton.translatesAutoresizingMaskIntoConstraints = NO;
     [restoreButton setTitle:@"RESTAURAR ORIGINAIS" forState:UIControlStateNormal];
@@ -243,6 +271,33 @@
 }
 
 #pragma mark - Actions
+
+- (void)syncCatalogTapped {
+    FFStatusAlertView *hud = [FFStatusAlertView showActivityWithTitle:@"SINCRONIZANDO"
+                                                              detail:@"catálogo de funções"];
+    dispatch_async(dispatch_get_global_queue(QOS_CLASS_USER_INITIATED, 0), ^{
+        FFCatalogResult *result = [[FFCatalogClient sharedClient] syncWithTimeout:15.0];
+        NSUInteger functions = 0;
+        for (FFGroup *group in result.manifest.groups) functions += group.functions.count;
+        dispatch_async(dispatch_get_main_queue(), ^{
+            [hud dismiss];
+            if (functions == 0) {
+                [FFStatusAlertView showWithStyle:FFAlertStyleFailure
+                                            title:@"STATUS"
+                                          message:FFUserMessageForError(result.error).uppercaseString
+                                           detail:@"verifique a conexão e a URL do catálogo"];
+            } else {
+                [FFStatusAlertView showWithStyle:FFAlertStyleSuccess
+                                            title:@"STATUS"
+                                          message:@"CATÁLOGO ATUALIZADO"
+                                           detail:[NSString stringWithFormat:@"%lu função(ões) disponíveis",
+                                               (unsigned long)functions]];
+            }
+            [[NSNotificationCenter defaultCenter] postNotificationName:FFCatalogDidSyncNotification
+                                                                object:result];
+        });
+    });
+}
 
 - (void)restoreAllTapped {
     UIAlertController *confirm = [UIAlertController

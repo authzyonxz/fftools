@@ -40,6 +40,10 @@ typedef NS_ENUM(NSInteger, FFErrorCode) {
 
 FOUNDATION_EXPORT NSError *FFMakeError(FFErrorCode code, NSString *format, ...) NS_FORMAT_FUNCTION(2, 3);
 
+/*! One short, user-facing line for an NSError (pt-BR). The technical detail
+    stays in the log / detail row; the alert never dumps a wall of text. */
+NSString *FFUserMessageForError(NSError *_Nullable error);
+
 /*! Minimal file logger (NSLog + a rotating file inside our own container). */
 void FFLog(NSString *format, ...) NS_FORMAT_FUNCTION(1, 2);
 NSString *FFLogFilePath(void);

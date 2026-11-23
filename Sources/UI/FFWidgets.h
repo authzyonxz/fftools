@@ -26,6 +26,7 @@ NS_ASSUME_NONNULL_BEGIN
 
 - (instancetype)initWithTitle:(NSString *)title subtitle:(NSString *)subtitle;
 - (void)setOn:(BOOL)isOn animated:(BOOL)animated;
+- (void)setSubtitleText:(NSString *)text;
 - (void)setInteractionEnabled:(BOOL)enabled;
 
 @end

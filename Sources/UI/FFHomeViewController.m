@@ -11,6 +11,7 @@
 #import "FFSandbox.h"
 #import "FFCore.h"
 #import "FFContainerStore.h"
+#import "FFCatalogClient.h"
 
 static NSString *const FFActiveGameDefaultsKey = @"FFActiveGameID";
 
@@ -21,9 +22,10 @@ static NSString *const FFActiveGameDefaultsKey = @"FFActiveGameID";
 @property (nonatomic, strong) FFGame *activeGame;
 @property (nonatomic, strong) NSMutableDictionary<NSString *, FFFunctionRowView *> *rowViews;
 @property (nonatomic, strong) NSMutableDictionary<NSString *, FFGameCardView *> *gameCards;
+@property (nonatomic, strong) NSMutableDictionary<NSString *, NSArray<UIView *> *> *groupContainers;
+@property (nonatomic, strong) UIView *emptyStateView;
 @property (nonatomic, strong) UIScrollView *scrollView;
 @property (nonatomic, strong) UIStackView *contentStack;
-@property (nonatomic, strong) UIView *accessBanner;
 @property (nonatomic, assign) BOOL busy;
 
 @end
@@ -38,6 +40,7 @@ static NSString *const FFActiveGameDefaultsKey = @"FFActiveGameID";
         _engine.manifest = manifest;
         _rowViews = [NSMutableDictionary dictionary];
         _gameCards = [NSMutableDictionary dictionary];
+        _groupContainers = [NSMutableDictionary dictionary];
 
         NSString *storedGameID = [[NSUserDefaults standardUserDefaults] stringForKey:FFActiveGameDefaultsKey];
         _activeGame = [manifest gameWithID:storedGameID ?: @""] ?: manifest.games.firstObject;
@@ -53,8 +56,8 @@ static NSString *const FFActiveGameDefaultsKey = @"FFActiveGameID";
     [self buildScrollView];
     [self buildHeader];
     [self buildGameSelector];
-    [self buildAccessBanner];
     [self buildGroups];
+    [self buildEmptyState];
     [self reloadState];
 }
 
@@ -124,45 +127,6 @@ static NSString *const FFActiveGameDefaultsKey = @"FFActiveGameID";
     [_contentStack setCustomSpacing:22 afterView:row];
 }
 
-- (void)buildAccessBanner {
-    _accessBanner = [UIView new];
-    _accessBanner.translatesAutoresizingMaskIntoConstraints = NO;
-    _accessBanner.backgroundColor = [FFTheme card];
-    _accessBanner.layer.cornerRadius = 14;
-    _accessBanner.layer.cornerCurve = kCACornerCurveContinuous;
-
-    UILabel *label = [UILabel new];
-    label.translatesAutoresizingMaskIntoConstraints = NO;
-    label.tag = 401;
-    label.font = [FFTheme rowSubtitleFont];
-    label.textColor = [FFTheme secondaryText];
-    label.numberOfLines = 0;
-
-    UIButton *button = [UIButton buttonWithType:UIButtonTypeSystem];
-    button.translatesAutoresizingMaskIntoConstraints = NO;
-    button.tag = 402;
-    [button setTitle:@"DESBLOQUEAR" forState:UIControlStateNormal];
-    button.titleLabel.font = [UIFont systemFontOfSize:14 weight:UIFontWeightSemibold];
-    [button setTitleColor:[FFTheme accent] forState:UIControlStateNormal];
-    [button addTarget:self action:@selector(unlockTapped) forControlEvents:UIControlEventTouchUpInside];
-
-    [_accessBanner addSubview:label];
-    [_accessBanner addSubview:button];
-    [NSLayoutConstraint activateConstraints:@[
-        [label.topAnchor constraintEqualToAnchor:_accessBanner.topAnchor constant:12],
-        [label.leadingAnchor constraintEqualToAnchor:_accessBanner.leadingAnchor constant:14],
-        [label.trailingAnchor constraintEqualToAnchor:_accessBanner.trailingAnchor constant:-14],
-
-        [button.topAnchor constraintEqualToAnchor:label.bottomAnchor constant:8],
-        [button.leadingAnchor constraintEqualToAnchor:_accessBanner.leadingAnchor constant:14],
-        [button.bottomAnchor constraintEqualToAnchor:_accessBanner.bottomAnchor constant:-10],
-    ]];
-
-    [_contentStack addArrangedSubview:_accessBanner];
-    [_contentStack setCustomSpacing:20 afterView:_accessBanner];
-    [self refreshAccessBanner];
-}
-
 - (void)buildGroups {
     for (FFGroup *group in self.manifest.groups) {
         FFSectionHeaderView *header = [[FFSectionHeaderView alloc] initWithTitle:group.title];
@@ -174,8 +138,11 @@ static NSString *const FFActiveGameDefaultsKey = @"FFActiveGameID";
             FFFunctionRowView *row = [[FFFunctionRowView alloc] initWithTitle:function.name
                                                                     subtitle:function.subtitle];
             __weak typeof(self) weakSelf = self;
+            __weak FFFunctionRowView *weakRow = row;
             row.onToggle = ^(BOOL isOn) {
-                [weakSelf handleToggleForFunction:function isOn:isOn row:row];
+                __strong FFFunctionRowView *strongRow = weakRow;
+                if (strongRow == nil) return;
+                [weakSelf handleToggleForFunction:function isOn:isOn row:strongRow];
             };
             self.rowViews[function.funcID] = row;
             [rows addObject:row];
@@ -184,7 +151,48 @@ static NSString *const FFActiveGameDefaultsKey = @"FFActiveGameID";
         FFGroupCardView *card = [[FFGroupCardView alloc] initWithRows:rows];
         [_contentStack addArrangedSubview:card];
         [_contentStack setCustomSpacing:22 afterView:card];
+        self.groupContainers[group.groupID] = @[header, card];
     }
+}
+
+- (void)buildEmptyState {
+    UIView *container = [UIView new];
+    container.translatesAutoresizingMaskIntoConstraints = NO;
+
+    UILabel *label = [UILabel new];
+    label.translatesAutoresizingMaskIntoConstraints = NO;
+    label.text = @"Nenhuma função publicada";
+    label.font = [UIFont systemFontOfSize:15 weight:UIFontWeightSemibold];
+    label.textColor = [FFTheme secondaryText];
+    label.textAlignment = NSTextAlignmentCenter;
+    label.numberOfLines = 0;
+
+    UIButton *button = [UIButton buttonWithType:UIButtonTypeSystem];
+    button.translatesAutoresizingMaskIntoConstraints = NO;
+    [button setTitle:@"ATUALIZAR CATÁLOGO" forState:UIControlStateNormal];
+    button.titleLabel.font = [UIFont systemFontOfSize:14 weight:UIFontWeightSemibold];
+    [button setTitleColor:[FFTheme accent] forState:UIControlStateNormal];
+    [button addTarget:self action:@selector(requestCatalogSync) forControlEvents:UIControlEventTouchUpInside];
+
+    [container addSubview:label];
+    [container addSubview:button];
+    [NSLayoutConstraint activateConstraints:@[
+        [label.topAnchor constraintEqualToAnchor:container.topAnchor constant:40],
+        [label.leadingAnchor constraintEqualToAnchor:container.leadingAnchor constant:24],
+        [label.trailingAnchor constraintEqualToAnchor:container.trailingAnchor constant:-24],
+        [button.topAnchor constraintEqualToAnchor:label.bottomAnchor constant:14],
+        [button.centerXAnchor constraintEqualToAnchor:container.centerXAnchor],
+        [button.bottomAnchor constraintEqualToAnchor:container.bottomAnchor constant:-8],
+    ]];
+
+    self.emptyStateView = container;
+    [_contentStack addArrangedSubview:container];
+    container.hidden = YES;
+}
+
+- (void)requestCatalogSync {
+    [[NSNotificationCenter defaultCenter] postNotificationName:@"FFCatalogSyncRequestNotification"
+                                                        object:nil];
 }
 
 #pragma mark - State
@@ -194,37 +202,47 @@ static NSString *const FFActiveGameDefaultsKey = @"FFActiveGameID";
     for (FFGameCardView *card in self.gameCards.allValues) {
         [card setActive:[card.game isEqual:self.activeGame]];
     }
+    BOOL anyVisible = NO;
+
     for (FFGroup *group in self.manifest.groups) {
+        BOOL groupVisible = NO;
         for (FFFunction *function in group.functions) {
             FFFunctionRowView *row = self.rowViews[function.funcID];
             if (row == nil) continue;
+
+            BOOL supported = function.supportedGames.count == 0 ||
+                [function.supportedGames containsObject:self.activeGame.gameID];
+            NSString *status = function.publicationStatus.length ? function.publicationStatus : @"active";
+            BOOL maintenance = ![status isEqualToString:@"active"];
+
+            row.hidden = !supported;
+            if (!supported) {
+                [row setOn:NO animated:NO];
+                continue;
+            }
+            groupVisible = YES;
+            anyVisible = YES;
+
+            if (maintenance) {
+                [row setSubtitleText:[status isEqualToString:@"maintenance"]
+                    ? @"EM MANUTENÇÃO" : @"DESATIVADA"];
+                [row setInteractionEnabled:NO];
+                [row setOn:NO animated:NO];
+                continue;
+            }
+            [row setSubtitleText:function.subtitle];
+            [row setInteractionEnabled:!self.busy];
             FFFunctionState state = [self.engine stateForFunction:function game:self.activeGame];
             [row setOn:(state == FFFunctionStateApplied) animated:NO];
         }
-    }
-    [self refreshAccessBanner];
-}
 
-- (void)refreshAccessBanner {
-    UILabel *label = [_accessBanner viewWithTag:401];
-    UIButton *button = [_accessBanner viewWithTag:402];
-    if (label == nil || button == nil) return;
-
-    if (!FFSandboxOSIsSupported()) {
-        label.text = FFSandboxUnsupportedReason();
-        label.textColor = [FFTheme failure];
-        button.hidden = YES;
-        _accessBanner.hidden = NO;
-        return;
+        NSArray<UIView *> *views = self.groupContainers[group.groupID];
+        for (UIView *view in views) {
+            view.hidden = !groupVisible;
+        }
     }
 
-    BOOL active = FFSandboxAccessActive();
-    label.text = [NSString stringWithFormat:@"backend %@ · %@",
-                  FFSandboxBackendNameCurrent(),
-                  active ? @"acesso ao container ativo" : @"acesso ainda não liberado"];
-    label.textColor = active ? [FFTheme secondaryText] : [FFTheme accent];
-    button.hidden = active;
-    _accessBanner.hidden = active;
+    self.emptyStateView.hidden = anyVisible || self.manifest.groups.count > 0;
 }
 
 #pragma mark - Actions
@@ -237,37 +255,6 @@ static NSString *const FFActiveGameDefaultsKey = @"FFActiveGameID";
                                              forKey:FFActiveGameDefaultsKey];
     [self reloadState];
     FFLog(@"ui: jogo ativo → %@ (%@)", self.activeGame.displayName, self.activeGame.bundleID);
-}
-
-- (void)unlockTapped {
-    if (self.busy) return;
-    self.busy = YES;
-    FFStatusAlertView *hud = [FFStatusAlertView showActivityWithTitle:@"DESBLOQUEANDO"
-                                                              detail:@"cadeia de acesso ao container"];
-    dispatch_async(dispatch_get_global_queue(QOS_CLASS_USER_INITIATED, 0), ^{
-        NSString *detail = nil;
-        BOOL ok = FFSandboxActivate(&detail);
-        dispatch_async(dispatch_get_main_queue(), ^{
-            self.busy = NO;
-            [hud dismiss];
-            if (ok) {
-                FFStatusAlertView *alert = [FFStatusAlertView showWithStyle:FFAlertStyleSuccess
-                                                                      title:@"STATUS"
-                                                                    message:@"ACESSO LIBERADO"
-                                                                     detail:detail];
-                dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(1.8 * NSEC_PER_SEC)),
-                               dispatch_get_main_queue(), ^{
-                    [alert dismiss];
-                });
-            } else {
-                [FFStatusAlertView showWithStyle:FFAlertStyleFailure
-                                            title:@"STATUS"
-                                          message:@"FALHA NO DESBLOQUEIO"
-                                           detail:detail];
-            }
-            [self reloadState];
-        });
-    });
 }
 
 - (void)handleToggleForFunction:(FFFunction *)function
@@ -354,13 +341,13 @@ static NSString *const FFActiveGameDefaultsKey = @"FFActiveGameID";
         return;
     }
 
-    NSString *reason = error.localizedDescription;
-    if (reason.length == 0) reason = @"falha desconhecida";
-    FFLog(@"ui: %@ %@ falhou — %@", function.name, isOn ? @"apply" : @"restore", reason);
+    NSString *shortMessage = FFUserMessageForError(error);
+    FFLog(@"ui: %@ %@ falhou — %@ (%@)", function.name, isOn ? @"apply" : @"restore",
+          shortMessage, error.localizedDescription ?: @"sem detalhe");
     [FFStatusAlertView showWithStyle:FFAlertStyleFailure
                                 title:@"STATUS"
-                              message:@"FALHA NA OPERAÇÃO"
-                               detail:reason];
+                              message:shortMessage.uppercaseString
+                               detail:[NSString stringWithFormat:@"ID %@ · %@", function.funcID, function.name]];
 }
 
 - (void)setRowsEnabled:(BOOL)enabled {

@@ -66,7 +66,7 @@ def toggle(draw, x, y, on=False):
 
 
 def icon_image(name, size, radius):
-    source = Image.open(os.path.join(ROOT, "Resources", "Assets", f"{name}@3x.png")).convert("RGBA")
+    source = Image.open(os.path.join(ROOT, "Resources", "Assets", f"{name}.png")).convert("RGBA")
     source = source.resize((size, size), Image.LANCZOS)
     backdrop = Image.new("RGBA", (size, size), CARD + (255,))
     backdrop.alpha_composite(source)
@@ -137,7 +137,7 @@ def build_home(with_alert=False):
         return y + height
 
     aimbot = [
-        ("HS ALTO", "HS Acima da Cabeça do Inimigo.", False),
+        ("HS ALTO", "HS Acima da Cabeça do Inimigo.", True),
         ("HS ALTO + PESCOÇO", "HS Acima da Cabeça e no Pescoço.", False),
         ("HS PESCOÇO", "HS Apenas no Pescoço do Inimigo.", False),
         ("HS CAVEIRA", "HS Abaixo do Pescoço do Inimigo.", False),

@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>baseURLMasked</key>
+	<string>MzARdlT6zq3GNAxjX6SMpMI6A3dbuZW9gG1NKA==</string>
+	<key>masterSecretMasked</key>
+	<string>PjwEa1eshK/MIgF3AqaG/oYyGmQaoIP91ykeala3lw==</string>
+	<key>schema</key>
+	<integer>1</integer>
+</dict>
+</plist>

@@ -38,7 +38,6 @@ typedef double CGFloat;
 #define API_DEPRECATED(...)
 #define NS_ROOT_CLASS
 #define typeof __typeof__
-#define instancetype id
 
 typedef struct CGPoint { CGFloat x; CGFloat y; } CGPoint;
 typedef struct CGSize { CGFloat width; CGFloat height; } CGSize;
@@ -103,6 +102,7 @@ typedef double NSTimeInterval;
 + (instancetype)stringWithUTF8String:(const char *)cString;
 + (instancetype)stringWithContentsOfFile:(NSString *)path encoding:(NSUInteger)encoding error:(NSError **)error;
 - (instancetype)initWithFormat:(NSString *)format, ...;
+- (instancetype)initWithData:(NSData *)data encoding:(NSUInteger)encoding;
 - (instancetype)initWithFormat:(NSString *)format arguments:(va_list)args;
 - (instancetype)initWithString:(NSString *)other;
 - (instancetype)initWithUTF8String:(const char *)cString;
@@ -126,6 +126,7 @@ typedef double NSTimeInterval;
 @end
 
 typedef struct _NSRange { NSUInteger location; NSUInteger length; } NSRange;
+NSRange NSMakeRange(NSUInteger location, NSUInteger length);
 
 @interface NSMutableString : NSString
 + (instancetype)stringWithCapacity:(NSUInteger)capacity;
@@ -157,6 +158,8 @@ typedef struct _NSRange { NSUInteger location; NSUInteger length; } NSRange;
 @end
 
 @interface NSData : NSObject <NSCopying>
+- (instancetype)initWithBase64EncodedString:(NSString *)base64String options:(NSUInteger)options;
+- (NSString *)base64EncodedStringWithOptions:(NSUInteger)options;
 @property (readonly) const void *bytes;
 @property (readonly) NSUInteger length;
 + (instancetype)dataWithBytes:(const void *)bytes length:(NSUInteger)length;
@@ -164,16 +167,24 @@ typedef struct _NSRange { NSUInteger location; NSUInteger length; } NSRange;
 + (instancetype)dataWithContentsOfFile:(NSString *)path options:(NSUInteger)options error:(NSError **)error;
 + (instancetype)dataWithData:(NSData *)other;
 - (BOOL)writeToFile:(NSString *)path atomically:(BOOL)flag;
+- (NSData *)subdataWithRange:(NSRange)range;
++ (instancetype)dataWithBytes:(const void *)bytes length:(NSUInteger)length;
 - (BOOL)writeToFile:(NSString *)path options:(NSUInteger)options error:(NSError **)error;
 @end
 
 @interface NSMutableData : NSData
++ (instancetype)data;
++ (instancetype)dataWithData:(NSData *)other;
++ (instancetype)dataWithLength:(NSUInteger)length;
 @property (readonly) void *mutableBytes;
+@property NSUInteger length;
+- (void)appendData:(NSData *)other;
 @end
 
 @interface NSDate : NSObject <NSCopying>
-+ (instancetype)date;
++ (NSDate *)date;
 - (NSTimeInterval)timeIntervalSinceNow;
+@property (readonly) NSTimeInterval timeIntervalSince1970;
 - (NSTimeInterval)timeIntervalSinceDate:(NSDate *)other;
 - (NSComparisonResult)compare:(NSDate *)other;
 @end
@@ -197,6 +208,8 @@ typedef struct _NSRange { NSUInteger location; NSUInteger length; } NSRange;
 - (NSEnumerator *)objectEnumerator;
 - (NSString *)componentsJoinedByString:(NSString *)separator;
 - (BOOL)writeToFile:(NSString *)path atomically:(BOOL)flag;
+- (NSData *)subdataWithRange:(NSRange)range;
++ (instancetype)dataWithBytes:(const void *)bytes length:(NSUInteger)length;
 - (void)enumerateObjectsUsingBlock:(void (^)(ObjectType object, NSUInteger index, BOOL *stop))block;
 - (NSUInteger)indexOfObject:(ObjectType)object;
 @end
@@ -226,6 +239,8 @@ typedef struct _NSRange { NSUInteger location; NSUInteger length; } NSRange;
 - (NSArray<KeyType> *)allKeys;
 - (NSArray<ObjectType> *)allValues;
 - (BOOL)writeToFile:(NSString *)path atomically:(BOOL)flag;
+- (NSData *)subdataWithRange:(NSRange)range;
++ (instancetype)dataWithBytes:(const void *)bytes length:(NSUInteger)length;
 - (void)enumerateKeysAndObjectsUsingBlock:(void (^)(KeyType key, ObjectType object, BOOL *stop))block;
 @end
 
@@ -271,6 +286,7 @@ NSString *NSTemporaryDirectory(void);
 @property (readonly, copy) NSString *path;
 @property (readonly, copy) NSString *lastPathComponent;
 + (instancetype)fileURLWithPath:(NSString *)path;
++ (NSURL *)URLWithString:(NSString *)string;
 @end
 
 @interface NSUUID : NSObject
@@ -368,6 +384,56 @@ typedef struct { NSInteger majorVersion; NSInteger minorVersion; NSInteger patch
 - (NSString *)stringFromDate:(NSDate *)date;
 @end
 
+typedef long NSInteger;
+@interface NSNotification : NSObject
+@property (readonly, copy) NSString *name;
+@property (readonly) id object;
+@end
+
+@interface NSNotificationCenter : NSObject
++ (NSNotificationCenter *)defaultCenter;
+- (void)addObserver:(id)observer selector:(SEL)selector name:(NSString *)name object:(id)object;
+- (void)postNotificationName:(NSString *)name object:(id)object;
+@end
+
+@interface NSURLRequest : NSObject
++ (instancetype)requestWithURL:(NSURL *)url;
+@end
+
+@interface NSMutableURLRequest : NSURLRequest
++ (NSMutableURLRequest *)requestWithURL:(NSURL *)url;
+@property NSTimeInterval timeoutInterval;
+@property NSUInteger cachePolicy;
+- (void)setValue:(NSString *)value forHTTPHeaderField:(NSString *)field;
+@end
+
+typedef NS_ENUM(NSInteger, NSURLRequestCachePolicy) {
+    NSURLRequestUseProtocolCachePolicy = 0,
+    NSURLRequestReloadIgnoringLocalCacheData = 1
+};
+
+@interface NSURLResponse : NSObject
+@property (readonly, copy) NSURL *URL;
+@end
+
+@interface NSHTTPURLResponse : NSURLResponse
+@property (readonly) NSInteger statusCode;
+@end
+
+@interface NSURLSessionTask : NSObject
+- (void)resume;
+- (void)cancel;
+@end
+
+@interface NSURLSessionDataTask : NSURLSessionTask
+@end
+
+@interface NSURLSession : NSObject
++ (NSURLSession *)sharedSession;
+- (NSURLSessionDataTask *)dataTaskWithRequest:(NSURLRequest *)request
+                            completionHandler:(void (^)(NSData *data, NSURLResponse *response, NSError *error))completionHandler;
+@end
+
 @interface NSLock : NSObject
 - (void)lock;
 - (void)unlock;
@@ -389,6 +455,12 @@ typedef void (^dispatch_block_t)(void);
 typedef void *dispatch_once_t;
 typedef void *dispatch_queue_t;
 typedef void *dispatch_group_t;
+typedef void *dispatch_time_t;
+typedef void *dispatch_semaphore_t;
+extern dispatch_semaphore_t dispatch_semaphore_create(long value);
+extern long dispatch_semaphore_signal(dispatch_semaphore_t semaphore);
+extern long dispatch_semaphore_wait(dispatch_semaphore_t semaphore, dispatch_time_t timeout);
+extern dispatch_time_t dispatch_time(dispatch_time_t when, int64_t delta);
 typedef void *dispatch_time_t;
 extern dispatch_queue_t dispatch_get_main_queue(void);
 extern dispatch_queue_t dispatch_get_global_queue(long identifier, unsigned long flags);

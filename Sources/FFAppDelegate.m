@@ -6,47 +6,144 @@
 #import "FFAppDelegate.h"
 #import "FFCore.h"
 #import "FFSandbox.h"
+#import "FFProtect.h"
 #import "FFManifest.h"
+#import "FFCatalogClient.h"
 #import "FFPatchEngine.h"
 #import "FFHomeViewController.h"
 #import "FFProfileViewController.h"
 #import "FFWidgets.h"
+#import "FFTheme.h"
 
 @interface FFAppDelegate ()
-@property (nonatomic, strong) UIActivityIndicatorView *bootSpinner;
+@property (nonatomic, strong) UITabBarController *tabs;
+@property (nonatomic, strong) UIViewController *loadingController;
+@property (nonatomic, strong) FFCatalogResult *lastResult;
+@property (nonatomic, assign) BOOL syncing;
 @end
 
 @implementation FFAppDelegate
 
 - (BOOL)application:(UIApplication *)application
     didFinishLaunchingWithOptions:(NSDictionary *)launchOptions {
-    FFLog(@"boot: FFPatch acessando o hardware. iOS %@ build %@ model %@",
-          FFOSVersionString(), FFOSBuildString(), FFDeviceModelIdentifier());
+    FFProtectInstall();
+    FFLog(@"boot: FFPatch iniciando. iOS %@ build %@ model %@ backend %@",
+          FFOSVersionString(), FFOSBuildString(), FFDeviceModelIdentifier(),
+          FFSandboxBackendNameCurrent());
 
     self.window = [[UIWindow alloc] initWithFrame:[UIScreen mainScreen].bounds];
     self.window.backgroundColor = [UIColor blackColor];
 
-    NSError *manifestError = nil;
-    FFManifest *manifest = [FFManifest loadFromBundle:nil error:&manifestError];
-    self.manifest = manifest;
+    [[NSNotificationCenter defaultCenter] addObserver:self
+                                             selector:@selector(catalogSynced:)
+                                                 name:FFCatalogDidSyncNotification
+                                               object:nil];
+    [[NSNotificationCenter defaultCenter] addObserver:self
+                                             selector:@selector(syncRequested:)
+                                                 name:@"FFCatalogSyncRequestNotification"
+                                               object:nil];
 
-    if (manifest == nil) {
-        [self presentFatalMessage:[NSString stringWithFormat:@"manifesto de payload ausente ou inválido:\n%@",
-                                   manifestError.localizedDescription ?: @"erro desconhecido"]];
-        [self.window makeKeyAndVisible];
-        [self warmUpSandboxBackend];
-        return YES;
-    }
-
-    UIViewController *root = [self buildRootWithManifest:manifest];
-    self.window.rootViewController = root;
+    [self showLoadingWithText:@"sincronizando catálogo"];
     [self.window makeKeyAndVisible];
 
-    [self warmUpSandboxBackend];
+    [self startCatalogSyncWithTimeout:12.0];
+    [self startSandboxInBackground];
     return YES;
 }
 
-- (UIViewController *)buildRootWithManifest:(FFManifest *)manifest {
+#pragma mark - Catalogue
+
+- (void)showLoadingWithText:(NSString *)text {
+    UIViewController *controller = [UIViewController new];
+    controller.view.backgroundColor = [UIColor blackColor];
+
+    UIActivityIndicatorView *spinner =
+        [[UIActivityIndicatorView alloc] initWithActivityIndicatorStyle:UIActivityIndicatorViewStyleLarge];
+    spinner.translatesAutoresizingMaskIntoConstraints = NO;
+    spinner.color = [UIColor whiteColor];
+    [spinner startAnimating];
+
+    UILabel *label = [UILabel new];
+    label.translatesAutoresizingMaskIntoConstraints = NO;
+    label.text = @"FFPatch";
+    label.font = [UIFont systemFontOfSize:22 weight:UIFontWeightBold];
+    label.textColor = [UIColor whiteColor];
+    label.textAlignment = NSTextAlignmentCenter;
+
+    UILabel *detail = [UILabel new];
+    detail.translatesAutoresizingMaskIntoConstraints = NO;
+    detail.text = text;
+    detail.font = [UIFont systemFontOfSize:13 weight:UIFontWeightRegular];
+    detail.textColor = [FFTheme secondaryText];
+    detail.textAlignment = NSTextAlignmentCenter;
+
+    [controller.view addSubview:spinner];
+    [controller.view addSubview:label];
+    [controller.view addSubview:detail];
+    [NSLayoutConstraint activateConstraints:@[
+        [spinner.centerXAnchor constraintEqualToAnchor:controller.view.centerXAnchor],
+        [spinner.centerYAnchor constraintEqualToAnchor:controller.view.centerYAnchor constant:-30],
+        [label.centerXAnchor constraintEqualToAnchor:controller.view.centerXAnchor],
+        [label.topAnchor constraintEqualToAnchor:spinner.bottomAnchor constant:18],
+        [detail.centerXAnchor constraintEqualToAnchor:controller.view.centerXAnchor],
+        [detail.topAnchor constraintEqualToAnchor:label.bottomAnchor constant:6],
+        [detail.leadingAnchor constraintGreaterThanOrEqualToAnchor:controller.view.leadingAnchor constant:24],
+        [detail.trailingAnchor constraintLessThanOrEqualToAnchor:controller.view.trailingAnchor constant:-24],
+    ]];
+
+    self.loadingController = controller;
+    self.window.rootViewController = controller;
+}
+
+- (void)startCatalogSyncWithTimeout:(NSTimeInterval)timeout {
+    if (self.syncing) return;
+    self.syncing = YES;
+    dispatch_async(dispatch_get_global_queue(QOS_CLASS_USER_INITIATED, 0), ^{
+        FFCatalogResult *result = [[FFCatalogClient sharedClient] syncWithTimeout:timeout];
+        self.syncing = NO;
+        self.lastResult = result;
+        [[NSNotificationCenter defaultCenter] postNotificationName:FFCatalogDidSyncNotification
+                                                            object:result];
+    });
+}
+
+- (void)catalogSynced:(NSNotification *)notification {
+    FFCatalogResult *result = [notification.object isKindOfClass:[FFCatalogResult class]]
+        ? (FFCatalogResult *)notification.object : self.lastResult;
+    dispatch_async(dispatch_get_main_queue(), ^{
+        [self installRootWithManifest:result.manifest result:result];
+    });
+}
+
+- (void)syncRequested:(NSNotification *)notification {
+    [self startCatalogSyncWithTimeout:15.0];
+}
+
+- (void)installRootWithManifest:(FFManifest *)manifest result:(FFCatalogResult *)result {
+    if (manifest == nil) manifest = [FFManifest emptyManifest];
+    [FFPatchEngine sharedEngine].manifest = manifest;
+
+    NSUInteger previousIndex = self.tabs.selectedIndex;
+    UITabBarController *tabs = [self buildRootWithManifest:manifest];
+    if (self.tabs != nil && previousIndex < tabs.viewControllers.count) {
+        tabs.selectedIndex = previousIndex;
+    }
+    self.tabs = tabs;
+
+    self.window.rootViewController = tabs;
+
+    if (result != nil) {
+        FFLog(@"catalog: instalado v%@ · %lu grupo(s) · cache=%d · erro=%@",
+              result.catalogVersion ?: @"—",
+              (unsigned long)manifest.groups.count,
+              (int)result.fromCache,
+              result.error.localizedDescription ?: @"nenhum");
+    }
+}
+
+#pragma mark - Root UI
+
+- (UITabBarController *)buildRootWithManifest:(FFManifest *)manifest {
     UITabBarController *tabs = [UITabBarController new];
 
     FFHomeViewController *home = [[FFHomeViewController alloc] initWithManifest:manifest];
@@ -57,12 +154,12 @@
 
     tabs.viewControllers = @[homeNavigation, profileNavigation];
 
-    UITabBarItem *homeItem = [[UITabBarItem alloc] initWithTitle:@"Início"
-        image:[UIImage systemImageNamed:@"house"] selectedImage:[UIImage systemImageNamed:@"house.fill"]];
-    UITabBarItem *profileItem = [[UITabBarItem alloc] initWithTitle:@"Perfil"
-        image:[UIImage systemImageNamed:@"person"] selectedImage:[UIImage systemImageNamed:@"person.fill"]];
-    home.tabBarItem = homeItem;
-    profile.tabBarItem = profileItem;
+    home.tabBarItem = [[UITabBarItem alloc] initWithTitle:@"Início"
+        image:[UIImage systemImageNamed:@"house"]
+        selectedImage:[UIImage systemImageNamed:@"house.fill"]];
+    profile.tabBarItem = [[UITabBarItem alloc] initWithTitle:@"Perfil"
+        image:[UIImage systemImageNamed:@"person"]
+        selectedImage:[UIImage systemImageNamed:@"person.fill"]];
 
     [self applyChrome];
     return tabs;
@@ -102,42 +199,21 @@
     [UITabBar appearance].tintColor = [UIColor whiteColor];
 }
 
-- (void)presentFatalMessage:(NSString *)message {
-    UIViewController *controller = [UIViewController new];
-    controller.view.backgroundColor = [UIColor blackColor];
+#pragma mark - Sandbox
 
-    UILabel *label = [UILabel new];
-    label.translatesAutoresizingMaskIntoConstraints = NO;
-    label.text = message;
-    label.textColor = [UIColor whiteColor];
-    label.font = [UIFont systemFontOfSize:15 weight:UIFontWeightMedium];
-    label.numberOfLines = 0;
-    label.textAlignment = NSTextAlignmentCenter;
-    [controller.view addSubview:label];
-    [NSLayoutConstraint activateConstraints:@[
-        [label.centerYAnchor constraintEqualToAnchor:controller.view.centerYAnchor],
-        [label.leadingAnchor constraintEqualToAnchor:controller.view.leadingAnchor constant:24],
-        [label.trailingAnchor constraintEqualToAnchor:controller.view.trailingAnchor constant:-24],
-    ]];
-    self.window.rootViewController = controller;
-}
-
-- (void)warmUpSandboxBackend {
-    // bad_query / worse_query activation is an API call, not an exploit: warm
-    // it up silently so the first toggle is not delayed. The kernel backend is
-    // deliberately left alone — it takes 10–30 s and needs the Unlock button.
-    dispatch_async(dispatch_get_global_queue(QOS_CLASS_UTILITY, 0), ^{
+- (void)startSandboxInBackground {
+    // Every backend starts on its own, silently:
+    //   kernel (iOS 17/18) → kexploit_opa334 + sandbox_escape, 10–30 s
+    //   bad_query (26.0–26.6.1) / worse_query (26.7+/27) → grant probe
+    dispatch_async(dispatch_get_global_queue(QOS_CLASS_USER_INITIATED, 0), ^{
         if (!FFSandboxOSIsSupported()) {
             FFLog(@"boot: sistema não suportado — %@", FFSandboxUnsupportedReason());
             return;
         }
-        if (FFSandboxCurrentBackend() == FFSandboxBackendKernel) {
-            FFLog(@"boot: backend kernel — aguardando desbloqueio manual");
-            return;
-        }
         NSString *detail = nil;
         BOOL ok = FFSandboxActivate(&detail);
-        FFLog(@"boot: warm-up %@ — %@", ok ? @"OK" : @"FALHOU", detail ?: @"sem detalhe");
+        FFLog(@"boot: backend %@ iniciado — %@ (%@)",
+              FFSandboxBackendNameCurrent(), ok ? @"OK" : @"FALHOU", detail ?: @"sem detalhe");
     });
 }
 

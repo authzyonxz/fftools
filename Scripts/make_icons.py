@@ -63,20 +63,15 @@ maximum = load(os.path.join(ROOT, "raw", "ff_max_play_icon_512.png"))
 normal_1024 = square(normal, 1024)
 max_1024 = square(maximum, 1024)
 
-# In-app game card icons: 64 pt → 1x/2x/3x
+# In-app game card icons: one 192 px PNG per game (the card renders at 64 pt;
+# shipping three scales per game only bloated the IPA).
 for name, base in (("normal", normal_1024), ("max", max_1024)):
-    for suffix, size in (("", 64), ("@2x", 128), ("@3x", 192)):
-        save(rounded_alpha(square(base, size)), os.path.join(ASSETS, f"ic_game_{name}{suffix}.png"))
+    save(rounded_alpha(square(base, 192)), os.path.join(ASSETS, f"ic_game_{name}.png"))
 
-save(normal_1024, os.path.join(ASSETS, "app_icon_1024.png"))
-
-# Home-screen icon: the tool uses the Free Fire artwork so it reads as a
-# companion app on the springboard.
+# Home-screen icon: iOS needs 60@2x/60@3x; everything else is derived by the OS.
 app_icon_sizes = {
-    "Icon-20@2x.png": 40, "Icon-20@3x.png": 60,
-    "Icon-29@2x.png": 58, "Icon-29@3x.png": 87,
-    "Icon-40@2x.png": 80, "Icon-40@3x.png": 120,
-    "Icon-60@2x.png": 120, "Icon-60@3x.png": 180,
+    "Icon-60@2x.png": 120,
+    "Icon-60@3x.png": 180,
     "Icon-1024.png": 1024,
 }
 for filename, size in app_icon_sizes.items():

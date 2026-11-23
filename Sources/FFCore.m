@@ -26,6 +26,34 @@ NSError *FFMakeError(FFErrorCode code, NSString *format, ...) {
                            userInfo:@{NSLocalizedDescriptionKey: message ?: @"erro desconhecido"}];
 }
 
+NSString *FFUserMessageForError(NSError *error) {
+    if (error == nil) return @"Erro desconhecido";
+    if (![error.domain isEqualToString:FFErrorDomain]) {
+        if ([error.domain isEqualToString:NSPOSIXErrorDomain]) return @"Sem permissão no aparelho";
+        return @"Falha inesperada";
+    }
+    switch ((FFErrorCode)error.code) {
+        case FFErrorUnsupportedOS:       return @"Sistema não suportado";
+        case FFErrorNoSandboxAccess:     return @"Sem permissão de acesso";
+        case FFErrorAppNotFound:         return @"Jogo não instalado";
+        case FFErrorPayloadMissing:      return @"Arquivo da função indisponível";
+        case FFErrorInvalidPayload:      return @"Arquivo da função inválido";
+        case FFErrorPathEscapesContainer:return @"Caminho inválido";
+        case FFErrorSymlinkRefused:      return @"Arquivo protegido por link";
+        case FFErrorAlreadyApplied:      return @"Função já está ativa";
+        case FFErrorNotApplied:          return @"Função não está ativa";
+        case FFErrorApplyFailed:         return @"Não foi possível aplicar";
+        case FFErrorRestoreFailed:       return @"Não foi possível restaurar";
+        case FFErrorVerifyFailed:        return @"Verificação falhou";
+        case FFErrorBackupMissing:       return @"Backup não encontrado";
+        case FFErrorContainerChanged:    return @"Reinstale o jogo para continuar";
+        case FFErrorTargetIsDirectory:   return @"Alvo inválido";
+        case FFErrorDuplicateTarget:     return @"Arquivo duplicado";
+        case FFErrorTargetNotFound:      return @"Arquivo não encontrado no jogo";
+        default:                         return @"Falha na operação";
+    }
+}
+
 #pragma mark - Logging
 
 static NSString *FFLogFile(void) {

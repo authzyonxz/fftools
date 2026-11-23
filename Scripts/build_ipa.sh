@@ -32,11 +32,13 @@ echo "== FFPatch $VERSION • SDK $SDK"
 
 rm -rf "$BUILD"
 mkdir -p "$APP/Frameworks" "$OBJ"
+
 INCLUDES=(-I"$ROOT/Sources" -I"$ROOT/Sources/UI" -I"$ROOT/Sources/Vendor")
 C_ONLY_FLAGS=(-arch arm64 -miphoneos-version-min="$MIN_IOS" -isysroot "$SDK" -O2 -std=gnu17
               -Wno-unused-function)
+# Hardening: hidden visibility, dead-strip, anti-debug compiled in.
 COMMON_FLAGS=(-arch arm64 -miphoneos-version-min="$MIN_IOS" -isysroot "$SDK" -O2
-              -fobjc-arc -fblocks -std=gnu17
+              -fobjc-arc -fblocks -std=gnu17 -fvisibility=hidden -DFF_ENABLE_ANTIDEBUG=1
               -Wno-deprecated-declarations -Wno-unused-variable -Wno-unused-function
               -Wno-nullability-completeness -Wno-incompatible-pointer-types)
 
@@ -59,10 +61,16 @@ for source in "$ROOT"/Sources/*.m "$ROOT"/Sources/UI/*.m "$ROOT"/Sources/Vendor/
 done
 
 "$CLANG" -arch arm64 -miphoneos-version-min="$MIN_IOS" -isysroot "$SDK" \
-    -dynamiclib -install_name @rpath/ffpatch.dylib \
+    -dynamiclib -install_name @rpath/ffpatch.dylib -Wl,-x -Wl,-dead_strip \
     -o "$APP/Frameworks/ffpatch.dylib" "${OBJECTS[@]}" \
     -framework UIKit -framework Foundation -framework CoreGraphics \
-    -framework QuartzCore -framework CoreFoundation -framework IOSurface -lz
+    -framework QuartzCore -framework CoreFoundation -framework IOSurface \
+    -framework Security -lz
+
+# Strip local symbols from the shipped dylib (best effort).
+if command -v xcrun >/dev/null 2>&1; then
+    xcrun strip -x "$APP/Frameworks/ffpatch.dylib" || true
+fi
 
 echo "== compilando launcher (MH_EXECUTE)"
 "$CLANG" -arch arm64 -miphoneos-version-min="$MIN_IOS" -isysroot "$SDK" -O2 \
@@ -71,7 +79,8 @@ echo "== compilando launcher (MH_EXECUTE)"
 echo "== copiando recursos"
 cp "$ROOT/Resources/Info.plist" "$APP/Info.plist"
 cp "$ROOT/Resources/License.plist" "$APP/License.plist"
-cp -R "$ROOT/Resources/Payloads" "$APP/Payloads"
+cp "$ROOT/Resources/Catalog.plist" "$APP/Catalog.plist"
+# Sem Resources/Payloads: os payloads vêm do catálogo remoto (FPP1 cifrado).
 
 # In-app artwork (UIImage imageNamed resolves @2x/@3x siblings automatically).
 for asset in "$ROOT"/Resources/Assets/*.png; do
@@ -82,10 +91,6 @@ done
 ICONSET="$ROOT/Resources/Assets.xcassets/AppIcon.appiconset"
 cp "$ICONSET/Icon-60@2x.png" "$APP/AppIcon60x60@2x.png"
 cp "$ICONSET/Icon-60@3x.png" "$APP/AppIcon60x60@3x.png"
-cp "$ICONSET/Icon-40@2x.png" "$APP/AppIcon40x40@2x.png"
-cp "$ICONSET/Icon-40@3x.png" "$APP/AppIcon40x40@3x.png"
-cp "$ICONSET/Icon-29@2x.png" "$APP/AppIcon29x29@2x.png"
-cp "$ICONSET/Icon-29@3x.png" "$APP/AppIcon29x29@3x.png"
 cp "$ICONSET/Icon-1024.png" "$APP/iTunesArtwork@2x.png"
 
 printf 'APPL????' > "$APP/PkgInfo"

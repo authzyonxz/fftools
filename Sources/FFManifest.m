@@ -115,6 +115,24 @@
         if (value > 0) function.locateMaxMatches = (NSUInteger)MIN(value, 64);
     }
 }
++ (instancetype)emptyManifest {
+    NSMutableArray<FFGame *> *games = [NSMutableArray array];
+    for (NSDictionary *entry in @[
+        @{@"id": @"freefireth", @"name": @"Free Fire Normal",
+          @"bundle": @"com.dts.freefireth", @"icon": @"ic_game_normal", @"root": @"data"},
+        @{@"id": @"freefiremax", @"name": @"Free Fire Max",
+          @"bundle": @"com.dts.freefiremax", @"icon": @"ic_game_max", @"root": @"data"},
+    ]) {
+        FFGame *game = [FFGame gameFromDictionary:entry error:NULL];
+        if (game != nil) [games addObject:game];
+    }
+    FFManifest *manifest = [FFManifest new];
+    manifest.games = games;
+    manifest.groups = @[];
+    manifest.payloadRoot = @"";
+    return manifest;
+}
+
 + (instancetype)manifestFromDictionary:(NSDictionary *)dictionary
                            payloadRoot:(NSString *)payloadRoot
                                  error:(NSError **)error {
@@ -150,6 +168,20 @@
             function.subtitle = rawFunction[@"subtitle"] ?: @"";
             function.payloadDirectory = rawFunction[@"payload"] ?: function.funcID;
             [self applyLocateDictionary:rawFunction[@"locate"] toFunction:function];
+
+            NSArray *games = rawFunction[@"games"];
+            if ([games isKindOfClass:[NSArray class]]) {
+                NSMutableArray<NSString *> *supported = [NSMutableArray array];
+                for (id entry in games) {
+                    if ([entry isKindOfClass:[NSString class]] && [entry length] > 0) {
+                        [supported addObject:entry];
+                    }
+                }
+                function.supportedGames = supported;
+            }
+            NSString *status = rawFunction[@"status"];
+            function.publicationStatus = [status isKindOfClass:[NSString class]] && status.length
+                ? status : @"active";
             if (function.funcID.length == 0 || function.name.length == 0) continue;
             if ([seenIDs containsObject:function.funcID]) {
                 if (error) *error = FFMakeError(FFErrorInvalidPayload,

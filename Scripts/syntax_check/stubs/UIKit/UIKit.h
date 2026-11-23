@@ -355,6 +355,7 @@ extern const NSInteger kCACornerCurveContinuous;
 @interface UITabBarController : UIViewController
 @property (copy) NSArray<UIViewController *> *viewControllers;
 @property (readonly) UIViewController *selectedViewController;
+@property NSUInteger selectedIndex;
 @end
 
 @interface UIAlertAction : NSObject

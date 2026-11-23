@@ -70,7 +70,7 @@
 
         _toggle = [UISwitch new];
         _toggle.translatesAutoresizingMaskIntoConstraints = NO;
-        _toggle.onTintColor = [FFTheme accent];
+        _toggle.onTintColor = [FFTheme success];   // ligado = verde, preenchido
         [_toggle addTarget:self
                     action:@selector(toggleChanged:)
           forControlEvents:UIControlEventValueChanged];
@@ -114,6 +114,10 @@
 
 - (void)setOn:(BOOL)isOn animated:(BOOL)animated {
     [_toggle setOn:isOn animated:animated];
+}
+
+- (void)setSubtitleText:(NSString *)text {
+    _subtitleLabel.text = text;
 }
 
 - (void)setInteractionEnabled:(BOOL)enabled {
