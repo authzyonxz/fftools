@@ -19,3 +19,6 @@ ff_normal_source.jpg
 
 # windows
 Thumbs.db
+
+# Official release archive is fetched and hash-verified before building.
+Sources/Vendor/LogosAPI/libAPIClient.a

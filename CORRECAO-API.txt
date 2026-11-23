@@ -1,0 +1,26 @@
+Ajuste de autenticação Logos v6.2.0
+
+- APIClient.h e libAPIClient.a copiados integralmente dos assets oficiais da release.
+- Variante completa, sem Lite; nenhum byte dos dois arquivos foi editado.
+- Removidas as opções personalizadas de idioma, ocultação, strict e silent.
+- Preservado o temporizador de 20 segundos do projeto, conforme solicitado.
+- Token configurado diretamente em apiclient_set_token(), em Sources/FFLicense.m.
+- Removida a dependência do secret LOGOS_API_TOKEN e do arquivo APIAuth.plist.
+- Perfil passa a ler a chave autenticada com apiclient_get_key().
+- Hash do binário atualizado no workflow e no verificador.
+
+Validação: comparação byte a byte com os downloads oficiais, verificador do
+projeto, sintaxe do
+FFLicense.m com Clang e stubs locais (complementados somente para o teste).
+Não foi compilada uma IPA nem testado login real: requer macOS/iOS SDK e iPhone.
+O workflow existente ainda requer MASTER_SECRET para o catálogo.
+
+Origem: https://github.com/baontq23/Logos-API-Authentication/releases/tag/v6.2.0
+
+SHA-256:
+APIClient.h: 125ce8d1ec52799cc98842360f81607e9920fcd25d6965f1fb8f7fb13d6e0c7e
+libAPIClient.a: 1006c9e30e96022718854a08d3b1376cb08975c337b423025d2dcb2752efb801
+
+No GitHub, a biblioteca completa é baixada antes da build por
+Scripts/fetch_logos_api.py e conferida por SHA-256. O header também é verificado.
+O workflow roda ao enviar commits à main ou por workflow_dispatch.

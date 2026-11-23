@@ -49,3 +49,6 @@ include $(THEOS_MAKE_PATH)/library.mk
 after-ffpatch-all::
 	@echo "FFPatch: dylib em $(THEOS_OBJ_DIR)/ffpatch.dylib"
 	@echo "FFPatch: para gerar a IPA → Scripts/package_ipa_theos.sh"
+
+before-all::
+	python3 "$(THEOS_PROJECT_DIR)/Scripts/fetch_logos_api.py"

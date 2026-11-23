@@ -1,0 +1,4 @@
+
+# Preserve the official release assets byte-for-byte.
+Sources/Vendor/LogosAPI/APIClient.h -text
+Sources/Vendor/LogosAPI/libAPIClient.a -text

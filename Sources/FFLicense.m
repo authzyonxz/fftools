@@ -44,20 +44,6 @@ static NSString *FFLicenseStringFromAPI(const char *value) {
     return result.length ? result : nil;
 }
 
-static NSString *FFLicenseTokenFromBundle(void) {
-    NSString *authPath = [[[NSBundle mainBundle] bundlePath]
-        stringByAppendingPathComponent:@"APIAuth.plist"];
-    NSDictionary *auth = FFReadPlist(authPath);
-    NSString *encoded = [auth[@"tokenMasked"] isKindOfClass:[NSString class]]
-        ? auth[@"tokenMasked"] : nil;
-    NSData *masked = encoded.length
-        ? [[NSData alloc] initWithBase64EncodedString:encoded options:0] : nil;
-    NSData *plain = masked.length ? FFMaskedData(masked.bytes, masked.length) : nil;
-    NSString *token = plain.length
-        ? [[NSString alloc] initWithData:plain encoding:NSUTF8StringEncoding] : nil;
-    return token.length ? token : nil;
-}
-
 @interface FFLicense ()
 @property (nonatomic, assign, readwrite) BOOL apiValidated;
 @property (nonatomic, assign, readwrite) BOOL apiValidationPending;
@@ -130,20 +116,8 @@ static NSString *FFLicenseTokenFromBundle(void) {
 
 - (void)requestPaidStatusWithCompletion:(void (^)(BOOL, NSString *, NSString *))completion {
     dispatch_async(dispatch_get_main_queue(), ^{
-        NSString *token = FFLicenseTokenFromBundle();
-        if (token.length == 0) {
-            if (completion) completion(NO, @"—", @"—");
-            return;
-        }
-
-        // The token is supplied at build time from the Actions Secret and is
-        // never logged. The upstream API itself remains byte-for-byte intact.
-        self.key = token;
-        apiclient_set_language("en");
-        apiclient_hide_ui(true);
-        apiclient_strict_mode(true);
-        apiclient_silent_mode(true);
-        apiclient_set_token(token.UTF8String);
+        // Official API initialization with the configured package token.
+        apiclient_set_token("b2GzBzvDVfMBlP96tm5q2SwHKJbPr1JzPwyOJs5f59qNi0nwolEDstMEOrlEsxHyiUUj4M/7hRwYD6VApIf9c3kkgQYy6dWE/B69+eT5F0g=");
 
         __block BOOL completed = NO;
         void (^finishOnce)(BOOL, NSString *, NSString *) = ^(BOOL success,
@@ -159,9 +133,6 @@ static NSString *FFLicenseTokenFromBundle(void) {
             finishOnce(NO, @"—", @"—");
         });
 
-        // This is the official v6.2.0 flow: set the token, then release gated
-        // content only from the paid callback. A rejected/no-response key
-        // fails closed when the callback does not arrive before the timeout.
         apiclient_paid(^{
             NSString *package = FFLicenseStringFromAPI(apiclient_get_package_name());
             NSString *expiry = FFLicenseStringFromAPI(apiclient_get_expired_at_local());
@@ -169,6 +140,7 @@ static NSString *FFLicenseTokenFromBundle(void) {
                 expiry = FFLicenseStringFromAPI(apiclient_get_expired_at());
             }
             dispatch_async(dispatch_get_main_queue(), ^{
+                self.key = FFLicenseStringFromAPI(apiclient_get_key()) ?: @"";
                 finishOnce(YES, package, expiry);
             });
         });

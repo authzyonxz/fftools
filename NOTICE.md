@@ -53,7 +53,7 @@ derived from other projects. It is not promotion.
 
 - **Logos API Authentication v6.2.0** — author Bao Nguyen (`baontq23`), supplied
   as `Sources/Vendor/LogosAPI/APIClient.h` and `Sources/Vendor/LogosAPI/libAPIClient.a`.
-  The files are copied byte-for-byte from the full upstream `API/` directory at
+  The files are copied byte-for-byte from the full upstream release assets at
   [`v6.2.0`](https://github.com/baontq23/Logos-API-Authentication/releases/tag/v6.2.0)
   and the archive is linked statically into `ffpatch.dylib`; the `.a` is not
   included as a separate file in the IPA. The upstream `API (Lite Secure)`
@@ -88,3 +88,12 @@ derived from other projects. It is not promotion.
 If you modify and redistribute this project you must keep `LICENSE` and this
 `NOTICE.md`, and state what you changed — that is the GPL-3.0 requirement and
 the requirement of this project.
+
+## Authentication integration update
+
+Replaced the header and full static library with the v6.2.0 release assets.
+Removed custom language and hidden UI / strict / silent overrides.
+Preserved the existing 20-second application timeout at the owner's request.
+Configured the supplied package token directly in apiclient_set_token().
+Removed the authentication secret and plist build dependency.
+The upstream header and library remain unmodified.

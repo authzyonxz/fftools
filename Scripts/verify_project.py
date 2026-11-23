@@ -134,7 +134,7 @@ def check_sources():
         "launcher/main.c",
         "Scripts/build_ipa.sh", "Scripts/build_theos.sh", "Scripts/package_ipa_theos.sh",
         "Scripts/make_icons.py",
-        "Scripts/protect_config.py", "Scripts/generate_api_auth.py", "Scripts/verify_project.py",
+        "Scripts/protect_config.py", "Scripts/verify_project.py",
         "Sources/Vendor/LogosAPI/APIClient.h", "Sources/Vendor/LogosAPI/libAPIClient.a",
         "Resources/SourceArt/ff_normal.jpg", "Resources/SourceArt/ff_max.jpg",
         "Resources/SourceArt/app_logo.jpg",
@@ -148,24 +148,20 @@ def check_sources():
 def check_logos_api_integration():
     """Check build wiring without looking for or requiring a token value."""
     references = {
-        "Scripts/generate_api_auth.py": (
-            "LOGOS_API_TOKEN", "tokenMasked", "MASK_KEY = 0x5B",
-            "((index * 31) & 0xFF)",
-        ),
         "Scripts/build_ipa.sh": (
-            "generate_api_auth.py", "libAPIClient.a", "Sources/Vendor/LogosAPI",
-            "-framework CFNetwork", "-framework SystemConfiguration", "-lc++", "APIAuth.plist",
+            "libAPIClient.a", "Sources/Vendor/LogosAPI",
+            "-framework CFNetwork", "-framework SystemConfiguration", "-lc++",
         ),
-        "Scripts/package_ipa_theos.sh": ("generate_api_auth.py", "APIAuth.plist"),
+        "Scripts/package_ipa_theos.sh": ("ffpatch.dylib",),
         "Makefile": (
             "libAPIClient.a", "Sources/Vendor/LogosAPI", "CFNetwork",
             "SystemConfiguration", "-ObjC", "-lz", "-lc++",
         ),
         ".github/workflows/build.yml": (
-            "LOGOS_API_TOKEN: ${{ secrets.LOGOS_API_TOKEN }}", "APIAuth.plist",
+            "workflow_dispatch",
         ),
         "Sources/FFLicense.m": (
-            "apiclient_set_token", 'apiclient_set_language("en")', "apiclient_paid(",
+            "apiclient_set_token", "apiclient_paid(",
             "apiclient_get_package_name", "apiclient_get_expired_at",
         ),
         "Sources/FFPatchEngine.m": ("consumeApplyAuthorization", "FFErrorAccessDenied"),
@@ -198,12 +194,12 @@ def check_logos_api_integration():
     archive_path = os.path.join(ROOT, "Sources/Vendor/LogosAPI/libAPIClient.a")
     if os.path.isfile(archive_path):
         digest = hashlib.sha256(open(archive_path, "rb").read()).hexdigest()
-        if digest != "bab76fe5082e60488fa1f6ecde04f2e505feac322e0bd0e6c1bec325426d3b5a":
+        if digest != "1006c9e30e96022718854a08d3b1376cb08975c337b423025d2dcb2752efb801":
             fail("libAPIClient.a não corresponde ao archive oficial v6.2.0 verificado")
     if os.path.exists(os.path.join(ROOT, "Sources/Vendor/LogosAPI/libAPIClientLite.a")):
         fail("a variante libAPIClientLite.a ainda existe no vendor do projeto")
 
-    notes.append("Logos API completa v6.2.0: hash, header C, token mascarado, gates de ativação e build conferidos")
+    notes.append("Logos API completa v6.2.0: hash, header C, token direto, gates de ativação e build conferidos")
 
 
 def check_site():

@@ -49,7 +49,6 @@ echo "== versão  : $VERSION"
 
 rm -rf "$BUILD"
 mkdir -p "$APP/Frameworks"
-python3 "$ROOT/Scripts/generate_api_auth.py"
 
 cp "$LAUNCHER" "$APP/External"
 chmod 755 "$APP/External"
@@ -58,8 +57,6 @@ cp "$DYLIB" "$APP/Frameworks/ffpatch.dylib"
 cp "$ROOT/Resources/Info.plist" "$APP/Info.plist"
 cp "$ROOT/Resources/License.plist" "$APP/License.plist"
 cp "$ROOT/Resources/Catalog.plist" "$APP/Catalog.plist"
-cp "$BUILD/APIAuth.plist" "$APP/APIAuth.plist"
-chmod 644 "$APP/APIAuth.plist"
 # Sem Resources/Payloads: payloads vêm do catálogo remoto (FPP1 cifrado).
 
 for asset in "$ROOT"/Resources/Assets/*.png; do
@@ -82,7 +79,7 @@ else
 fi
 
 echo "== checando layout"
-for required in "$APP/External" "$APP/Frameworks/ffpatch.dylib" "$APP/Info.plist" "$APP/Catalog.plist" "$APP/APIAuth.plist"; do
+for required in "$APP/External" "$APP/Frameworks/ffpatch.dylib" "$APP/Info.plist" "$APP/Catalog.plist"; do
     [[ -e "$required" ]] || { echo "erro: falta $required" >&2; exit 1; }
 done
 if find "$APP" -type f -name '*.a' -print -quit | grep -q .; then

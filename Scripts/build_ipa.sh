@@ -13,6 +13,7 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+python3 "$ROOT/Scripts/fetch_logos_api.py"
 BUILD="$ROOT/build"
 APP="$BUILD/Payload/External iOS.app"
 OBJ="$BUILD/obj"
@@ -32,7 +33,6 @@ echo "== FFPatch $VERSION • SDK $SDK"
 
 rm -rf "$BUILD"
 mkdir -p "$APP/Frameworks" "$OBJ"
-python3 "$ROOT/Scripts/generate_api_auth.py"
 
 INCLUDES=(-I"$ROOT/Sources" -I"$ROOT/Sources/UI" -I"$ROOT/Sources/Vendor" \
           -I"$ROOT/Sources/Vendor/LogosAPI")
@@ -83,8 +83,6 @@ echo "== copiando recursos"
 cp "$ROOT/Resources/Info.plist" "$APP/Info.plist"
 cp "$ROOT/Resources/License.plist" "$APP/License.plist"
 cp "$ROOT/Resources/Catalog.plist" "$APP/Catalog.plist"
-cp "$BUILD/APIAuth.plist" "$APP/APIAuth.plist"
-chmod 644 "$APP/APIAuth.plist"
 # Sem Resources/Payloads: os payloads vêm do catálogo remoto (FPP1 cifrado).
 
 # In-app artwork (UIImage imageNamed resolves @2x/@3x siblings automatically).
