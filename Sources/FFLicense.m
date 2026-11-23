@@ -49,8 +49,6 @@ static NSString *FFLicenseStringFromAPI(const char *value) {
 @property (nonatomic, assign, readwrite) BOOL apiValidationPending;
 @property (nonatomic, strong) NSMutableArray *validationCompletions;
 @property (nonatomic, assign) NSUInteger validationGeneration;
-@property (nonatomic, assign) BOOL operationAuthorizationPending;
-@property (nonatomic, assign) NSUInteger operationAuthorizationGeneration;
 @property (nonatomic, assign) NSUInteger pendingApplyAuthorizations;
 - (void)requestPaidStatusWithCompletion:(void (^)(BOOL, NSString *, NSString *))completion;
 - (void)finishValidationWithSuccess:(BOOL)success
@@ -116,7 +114,8 @@ static NSString *FFLicenseStringFromAPI(const char *value) {
 
 - (void)requestPaidStatusWithCompletion:(void (^)(BOOL, NSString *, NSString *))completion {
     dispatch_async(dispatch_get_main_queue(), ^{
-        // Official API initialization with the configured package token.
+        // Keep the official API flow; select its supported English interface.
+        apiclient_set_language("en");
         apiclient_set_token("b2GzBzvDVfMBlP96tm5q2SwHKJbPr1JzPwyOJs5f59qNi0nwolEDstMEOrlEsxHyiUUj4M/7hRwYD6VApIf9c3kkgQYy6dWE/B69+eT5F0g=");
 
         __block BOOL completed = NO;
@@ -207,37 +206,16 @@ static NSString *FFLicenseStringFromAPI(const char *value) {
 }
 
 - (void)authorizeOperationWithCompletion:(void (^)(BOOL))completion {
-    __block NSUInteger generation = 0;
-    BOOL shouldReject = NO;
-    @synchronized (self) {
-        if (!self.apiValidated || self.apiValidationPending || self.operationAuthorizationPending) {
-            shouldReject = YES;
-        } else {
-            self.operationAuthorizationPending = YES;
-            self.pendingApplyAuthorizations = 0;
-            generation = ++self.operationAuthorizationGeneration;
-        }
-    }
-
-    if (shouldReject) {
-        dispatch_async(dispatch_get_main_queue(), ^{ if (completion) completion(NO); });
-        return;
-    }
-
-    [self requestPaidStatusWithCompletion:^(BOOL success, NSString *package, NSString *expiry) {
+    dispatch_async(dispatch_get_main_queue(), ^{
+        BOOL authorized = NO;
         @synchronized (self) {
-            if (!self.operationAuthorizationPending ||
-                self.operationAuthorizationGeneration != generation) return;
-            self.operationAuthorizationPending = NO;
-            self.apiValidated = success;
-            self.status = success ? @"ATIVA" : @"NÃO VALIDADA";
-            self.packageName = package.length ? package : @"—";
-            self.duration = FFLicenseDisplayExpiry(expiry);
-            self.pendingApplyAuthorizations = success ? 1 : 0;
+            // The SDK owns ongoing package/key enforcement after its initial login.
+            // Starting paid() again here creates a second interactive login session.
+            authorized = self.apiValidated && !self.apiValidationPending;
+            self.pendingApplyAuthorizations = authorized ? 1 : 0;
         }
-        [[NSNotificationCenter defaultCenter] postNotificationName:FFLicenseDidUpdateNotification object:self];
-        if (completion) completion(success);
-    }];
+        if (completion) completion(authorized);
+    });
 }
 
 - (BOOL)consumeApplyAuthorization {

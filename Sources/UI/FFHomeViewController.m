@@ -293,10 +293,6 @@ static FFGame *FFNormalGame(FFManifest *manifest) {
     if (isOn && !license.apiValidated) {
         [row setOn:NO animated:YES];
         BOOL pending = license.apiValidationPending;
-        if (!pending) {
-            [license validateWithCompletion:nil];
-            pending = license.apiValidationPending;
-        }
         [self reloadState];
         [self presentSystemAlertWithMessage:pending
             ? @"A validação do acesso está em andamento. Tente novamente em instantes."

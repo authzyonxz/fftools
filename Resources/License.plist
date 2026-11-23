@@ -11,9 +11,9 @@
 	<key>package</key>
 	<string>com.external.app</string>
 	<key>version</key>
-	<string>1.1.5</string>
+	<string>1.1.6</string>
 	<key>build</key>
-	<string>7</string>
+	<string>8</string>
 	<key>compatible</key>
 	<array>
 		<string>iOS 17.0–17.7.x</string>
