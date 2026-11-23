@@ -32,6 +32,9 @@ FOUNDATION_EXPORT NSNotificationName const FFLicenseDidUpdateNotification;
 
 + (instancetype)current;
 - (void)validateWithCompletion:(nullable void (^)(BOOL isValid))completion;
+- (void)authorizeOperationWithCompletion:(nullable void (^)(BOOL authorized))completion;
+- (BOOL)consumeApplyAuthorization;
+- (void)revokeApplyAuthorization;
 - (NSString *)summaryText;
 
 @end

@@ -7,6 +7,7 @@
 #import "FFCore.h"
 #import "FFSandbox.h"
 #import "FFContainerStore.h"
+#import "FFLicense.h"
 
 #import <sys/stat.h>
 #import <unistd.h>
@@ -209,6 +210,10 @@ static NSRecursiveLock *FFPatchEngineOperationLock(void) {
     NSRecursiveLock *operationLock = FFPatchEngineOperationLock();
     [operationLock lock];
     @try {
+    if (![[FFLicense current] consumeApplyAuthorization]) {
+        if (error) *error = FFMakeError(FFErrorAccessDenied, @"A API não autorizou esta ativação");
+        return NO;
+    }
     if (!FFSandboxOSIsSupported()) {
         if (error) *error = FFMakeError(FFErrorUnsupportedOS, @"%@", FFSandboxUnsupportedReason());
         return NO;

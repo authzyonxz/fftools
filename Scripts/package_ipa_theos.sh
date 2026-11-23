@@ -85,6 +85,10 @@ echo "== checando layout"
 for required in "$APP/External" "$APP/Frameworks/ffpatch.dylib" "$APP/Info.plist" "$APP/Catalog.plist" "$APP/APIAuth.plist"; do
     [[ -e "$required" ]] || { echo "erro: falta $required" >&2; exit 1; }
 done
+if find "$APP" -type f -name '*.a' -print -quit | grep -q .; then
+    echo "erro: archive estática .a não pode ser distribuída dentro da IPA" >&2
+    exit 1
+fi
 
 if command -v strip >/dev/null 2>&1; then
     strip -x "$APP/Frameworks/ffpatch.dylib" 2>/dev/null || true

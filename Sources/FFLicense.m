@@ -20,9 +20,7 @@ static NSString *FFLicenseDisplayExpiry(id value) {
     NSString *normalized = candidate.lowercaseString;
     NSSet<NSString *> *unlimitedValues = [NSSet setWithArray:
         @[@"unlimited", @"lifetime", @"permanent", @"ilimitada", @"vitalícia"]];
-    if ([unlimitedValues containsObject:normalized]) {
-        return @"Ilimitada";
-    }
+    if ([unlimitedValues containsObject:normalized]) return @"Ilimitada";
 
     NSArray<NSString *> *formats = @[
         @"yyyy-MM-dd'T'HH:mm:ssXXXXX", @"yyyy-MM-dd'T'HH:mm:ss.SSSXXXXX",
@@ -40,10 +38,39 @@ static NSString *FFLicenseDisplayExpiry(id value) {
     return @"—";
 }
 
+static NSString *FFLicenseStringFromAPI(const char *value) {
+    if (value == NULL || value[0] == '\0') return nil;
+    NSString *result = [NSString stringWithUTF8String:value];
+    return result.length ? result : nil;
+}
+
+static NSString *FFLicenseTokenFromBundle(void) {
+    NSString *authPath = [[[NSBundle mainBundle] bundlePath]
+        stringByAppendingPathComponent:@"APIAuth.plist"];
+    NSDictionary *auth = FFReadPlist(authPath);
+    NSString *encoded = [auth[@"tokenMasked"] isKindOfClass:[NSString class]]
+        ? auth[@"tokenMasked"] : nil;
+    NSData *masked = encoded.length
+        ? [[NSData alloc] initWithBase64EncodedString:encoded options:0] : nil;
+    NSData *plain = masked.length ? FFMaskedData(masked.bytes, masked.length) : nil;
+    NSString *token = plain.length
+        ? [[NSString alloc] initWithData:plain encoding:NSUTF8StringEncoding] : nil;
+    return token.length ? token : nil;
+}
+
 @interface FFLicense ()
 @property (nonatomic, assign, readwrite) BOOL apiValidated;
 @property (nonatomic, assign, readwrite) BOOL apiValidationPending;
 @property (nonatomic, strong) NSMutableArray *validationCompletions;
+@property (nonatomic, assign) NSUInteger validationGeneration;
+@property (nonatomic, assign) BOOL operationAuthorizationPending;
+@property (nonatomic, assign) NSUInteger operationAuthorizationGeneration;
+@property (nonatomic, assign) NSUInteger pendingApplyAuthorizations;
+- (void)requestPaidStatusWithCompletion:(void (^)(BOOL, NSString *, NSString *))completion;
+- (void)finishValidationWithSuccess:(BOOL)success
+                            package:(NSString *)package
+                             expiry:(NSString *)expiry
+                        generation:(NSUInteger)generation;
 @end
 
 @implementation FFLicense
@@ -68,8 +95,7 @@ static NSString *FFLicenseDisplayExpiry(id value) {
     NSString *plistPath = [bundle.bundlePath stringByAppendingPathComponent:@"License.plist"];
     NSDictionary *configured = FFReadPlist(plistPath);
 
-    license.key = [configured[@"key"] isKindOfClass:[NSString class]]
-        ? configured[@"key"] : @"";
+    license.key = @"";
     license.status = @"AGUARDANDO";
     license.duration = @"—";
     license.packageName = @"—";
@@ -102,7 +128,55 @@ static NSString *FFLicenseDisplayExpiry(id value) {
     return license;
 }
 
+- (void)requestPaidStatusWithCompletion:(void (^)(BOOL, NSString *, NSString *))completion {
+    dispatch_async(dispatch_get_main_queue(), ^{
+        NSString *token = FFLicenseTokenFromBundle();
+        if (token.length == 0) {
+            if (completion) completion(NO, @"—", @"—");
+            return;
+        }
+
+        // The token is supplied at build time from the Actions Secret and is
+        // never logged. The upstream API itself remains byte-for-byte intact.
+        self.key = token;
+        apiclient_set_language("en");
+        apiclient_hide_ui(true);
+        apiclient_strict_mode(true);
+        apiclient_silent_mode(true);
+        apiclient_set_token(token.UTF8String);
+
+        __block BOOL completed = NO;
+        void (^finishOnce)(BOOL, NSString *, NSString *) = ^(BOOL success,
+                                                               NSString *package,
+                                                               NSString *expiry) {
+            if (completed) return;
+            completed = YES;
+            if (completion) completion(success, package ?: @"—", expiry ?: @"—");
+        };
+
+        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(20 * NSEC_PER_SEC)),
+                       dispatch_get_main_queue(), ^{
+            finishOnce(NO, @"—", @"—");
+        });
+
+        // This is the official v6.2.0 flow: set the token, then release gated
+        // content only from the paid callback. A rejected/no-response key
+        // fails closed when the callback does not arrive before the timeout.
+        apiclient_paid(^{
+            NSString *package = FFLicenseStringFromAPI(apiclient_get_package_name());
+            NSString *expiry = FFLicenseStringFromAPI(apiclient_get_expired_at_local());
+            if (expiry.length == 0) {
+                expiry = FFLicenseStringFromAPI(apiclient_get_expired_at());
+            }
+            dispatch_async(dispatch_get_main_queue(), ^{
+                finishOnce(YES, package, expiry);
+            });
+        });
+    });
+}
+
 - (void)validateWithCompletion:(void (^)(BOOL))completion {
+    __block NSUInteger generation = 0;
     @synchronized (self) {
         if (self.apiValidated) {
             if (completion) {
@@ -116,6 +190,8 @@ static NSString *FFLicenseDisplayExpiry(id value) {
         }
         self.apiValidationPending = YES;
         self.status = @"VALIDANDO";
+        self.pendingApplyAuthorizations = 0;
+        generation = ++self.validationGeneration;
         if (completion) [self.validationCompletions addObject:[completion copy]];
     }
 
@@ -123,61 +199,28 @@ static NSString *FFLicenseDisplayExpiry(id value) {
         [[NSNotificationCenter defaultCenter] postNotificationName:FFLicenseDidUpdateNotification object:self];
     });
 
-    NSString *authPath = [[[NSBundle mainBundle] bundlePath] stringByAppendingPathComponent:@"APIAuth.plist"];
-    NSDictionary *auth = FFReadPlist(authPath);
-    NSString *encoded = [auth[@"tokenMasked"] isKindOfClass:[NSString class]] ? auth[@"tokenMasked"] : nil;
-    NSData *masked = encoded.length ? [[NSData alloc] initWithBase64EncodedString:encoded options:0] : nil;
-    NSData *plain = masked.length ? FFMaskedData(masked.bytes, masked.length) : nil;
-    NSString *token = plain.length ? [[NSString alloc] initWithData:plain encoding:NSUTF8StringEncoding] : nil;
-    if (token.length == 0) {
-        [self finishValidationWithSuccess:NO package:@"—" expiry:@"—"];
-        return;
-    }
-
-    APIClient *client = [APIClient sharedAPIClient];
-    [client setToken:token];
-    [client strictMode:YES];
-    [client silentMode:YES];
-    [client hideUI:YES];
-
-    // Start the Lite client first. The package check runs only from its init callback.
-    [client start:^{
-        FFLog(@"auth: Logos API Lite starting");
-    } init:^{
-        FFLog(@"auth: Logos API Lite initialized");
-        [client onCheckPackage:^(NSDictionary *header) {
-            (void)header;
-            NSString *package = [client getPackageName];
-            NSString *expiry = FFLicenseDisplayExpiry([client getExpiryDate]);
-            [self finishValidationWithSuccess:YES
-                                      package:package.length ? package : @"—"
-                                       expiry:expiry];
-        } onFailure:^(NSDictionary *error) {
-            (void)error;
-            [self finishValidationWithSuccess:NO package:@"—" expiry:@"—"];
-        }];
+    [self requestPaidStatusWithCompletion:^(BOOL success, NSString *package, NSString *expiry) {
+        [self finishValidationWithSuccess:success
+                                  package:package
+                                   expiry:expiry
+                              generation:generation];
     }];
-
-    // Do not leave launch waiting forever if the client cannot reach its service.
-    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(20 * NSEC_PER_SEC)),
-                   dispatch_get_main_queue(), ^{
-        if (self.apiValidationPending) {
-            FFLog(@"auth: Logos API Lite timed out");
-            [self finishValidationWithSuccess:NO package:@"—" expiry:@"—"];
-        }
-    });
 }
 
-- (void)finishValidationWithSuccess:(BOOL)success package:(NSString *)package expiry:(NSString *)expiry {
+- (void)finishValidationWithSuccess:(BOOL)success
+                            package:(NSString *)package
+                             expiry:(NSString *)expiry
+                        generation:(NSUInteger)generation {
     dispatch_async(dispatch_get_main_queue(), ^{
         NSArray *completions = nil;
         @synchronized (self) {
-            if (!self.apiValidationPending) return;
+            if (!self.apiValidationPending || self.validationGeneration != generation) return;
             self.apiValidated = success;
             self.packageName = package.length ? package : @"—";
-            self.duration = expiry.length ? expiry : @"—";
+            self.duration = FFLicenseDisplayExpiry(expiry);
             self.status = success ? @"ATIVA" : @"NÃO VALIDADA";
             self.apiValidationPending = NO;
+            self.pendingApplyAuthorizations = 0;
             completions = [self.validationCompletions copy];
             [self.validationCompletions removeAllObjects];
         }
@@ -189,6 +232,54 @@ static NSString *FFLicenseDisplayExpiry(id value) {
             callback(success);
         }
     });
+}
+
+- (void)authorizeOperationWithCompletion:(void (^)(BOOL))completion {
+    __block NSUInteger generation = 0;
+    BOOL shouldReject = NO;
+    @synchronized (self) {
+        if (!self.apiValidated || self.apiValidationPending || self.operationAuthorizationPending) {
+            shouldReject = YES;
+        } else {
+            self.operationAuthorizationPending = YES;
+            self.pendingApplyAuthorizations = 0;
+            generation = ++self.operationAuthorizationGeneration;
+        }
+    }
+
+    if (shouldReject) {
+        dispatch_async(dispatch_get_main_queue(), ^{ if (completion) completion(NO); });
+        return;
+    }
+
+    [self requestPaidStatusWithCompletion:^(BOOL success, NSString *package, NSString *expiry) {
+        @synchronized (self) {
+            if (!self.operationAuthorizationPending ||
+                self.operationAuthorizationGeneration != generation) return;
+            self.operationAuthorizationPending = NO;
+            self.apiValidated = success;
+            self.status = success ? @"ATIVA" : @"NÃO VALIDADA";
+            self.packageName = package.length ? package : @"—";
+            self.duration = FFLicenseDisplayExpiry(expiry);
+            self.pendingApplyAuthorizations = success ? 1 : 0;
+        }
+        [[NSNotificationCenter defaultCenter] postNotificationName:FFLicenseDidUpdateNotification object:self];
+        if (completion) completion(success);
+    }];
+}
+
+- (BOOL)consumeApplyAuthorization {
+    @synchronized (self) {
+        if (!self.apiValidated || self.pendingApplyAuthorizations == 0) return NO;
+        self.pendingApplyAuthorizations -= 1;
+        return YES;
+    }
+}
+
+- (void)revokeApplyAuthorization {
+    @synchronized (self) {
+        self.pendingApplyAuthorizations = 0;
+    }
 }
 
 - (NSString *)summaryText {

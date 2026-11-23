@@ -65,7 +65,7 @@ done
 "$CLANG" -arch arm64 -miphoneos-version-min="$MIN_IOS" -isysroot "$SDK" \
     -dynamiclib -install_name @rpath/ffpatch.dylib -Wl,-x -Wl,-dead_strip -ObjC \
     -o "$APP/Frameworks/ffpatch.dylib" "${OBJECTS[@]}" \
-    "$ROOT/Sources/Vendor/LogosAPI/libAPIClientLite.a" \
+    "$ROOT/Sources/Vendor/LogosAPI/libAPIClient.a" \
     -framework UIKit -framework Foundation -framework CoreGraphics \
     -framework QuartzCore -framework CoreFoundation -framework IOSurface \
     -framework Security -framework CFNetwork -framework SystemConfiguration -lz
@@ -110,6 +110,11 @@ if [[ -n "${CODESIGN_IDENTITY:-}" ]]; then
         "$APP"
 else
     echo "== sem CODESIGN_IDENTITY: IPA sairá UNSIGNED (assine com ESign/AltStore/Sideloadly)"
+fi
+
+if find "$APP" -type f -name '*.a' -print -quit | grep -q .; then
+    echo "erro: archive estática .a não pode ser distribuída dentro da IPA" >&2
+    exit 1
 fi
 
 echo "== empacotando"

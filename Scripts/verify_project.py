@@ -12,6 +12,7 @@ Checks:
 
 Exit code 0 = all checks passed.
 """
+import hashlib
 import json
 import os
 import plistlib
@@ -134,7 +135,7 @@ def check_sources():
         "Scripts/build_ipa.sh", "Scripts/build_theos.sh", "Scripts/package_ipa_theos.sh",
         "Scripts/make_icons.py",
         "Scripts/protect_config.py", "Scripts/generate_api_auth.py", "Scripts/verify_project.py",
-        "Sources/Vendor/LogosAPI/APIClient.h", "Sources/Vendor/LogosAPI/libAPIClientLite.a",
+        "Sources/Vendor/LogosAPI/APIClient.h", "Sources/Vendor/LogosAPI/libAPIClient.a",
         "Resources/SourceArt/ff_normal.jpg", "Resources/SourceArt/ff_max.jpg",
         "Resources/SourceArt/app_logo.jpg",
     ]
@@ -152,20 +153,23 @@ def check_logos_api_integration():
             "((index * 31) & 0xFF)",
         ),
         "Scripts/build_ipa.sh": (
-            "generate_api_auth.py", "libAPIClientLite.a", "Sources/Vendor/LogosAPI",
+            "generate_api_auth.py", "libAPIClient.a", "Sources/Vendor/LogosAPI",
             "-framework CFNetwork", "-framework SystemConfiguration", "APIAuth.plist",
         ),
         "Scripts/package_ipa_theos.sh": ("generate_api_auth.py", "APIAuth.plist"),
         "Makefile": (
-            "libAPIClientLite.a", "Sources/Vendor/LogosAPI", "CFNetwork",
+            "libAPIClient.a", "Sources/Vendor/LogosAPI", "CFNetwork",
             "SystemConfiguration", "-ObjC", "-lz",
         ),
         ".github/workflows/build.yml": (
             "LOGOS_API_TOKEN: ${{ secrets.LOGOS_API_TOKEN }}", "APIAuth.plist",
         ),
         "Sources/FFLicense.m": (
-            "[client start:", "init:^{", "onCheckPackage:", "getExpiryDate",
+            "apiclient_set_token", 'apiclient_set_language("en")', "apiclient_paid(",
+            "apiclient_get_package_name", "apiclient_get_expired_at",
         ),
+        "Sources/FFPatchEngine.m": ("consumeApplyAuthorization", "FFErrorAccessDenied"),
+        "Sources/FFAppDelegate.m": ("handleAuthorizationResult", "showAccessBlocked"),
     }
     for relative, expected in references.items():
         path = os.path.join(ROOT, relative)
@@ -177,7 +181,29 @@ def check_logos_api_integration():
         for reference in expected:
             if reference not in text:
                 fail(f"integração Logos API: referência ausente em {relative}: {reference}")
-    notes.append("Logos API: header/library, geração mascarada e referências de build/bundle/Actions conferidas (sem exigir valor do token)")
+        if "APIClientLite" in text or "API Lite" in text:
+            fail(f"integração Logos API: referência à variante Lite em {relative}")
+
+    header_path = os.path.join(ROOT, "Sources/Vendor/LogosAPI/APIClient.h")
+    if os.path.isfile(header_path):
+        with open(header_path, encoding="utf-8") as handle:
+            header = handle.read()
+        for symbol in ("apiclient_set_token", "apiclient_set_language", "apiclient_paid",
+                       "apiclient_on_check_package", "apiclient_get_package_name"):
+            if symbol not in header:
+                fail(f"header da API completa sem {symbol}")
+        if "@interface APIClient" in header or "start:" in header:
+            fail("header Lite/Objective-C detectado no lugar do header C completo")
+
+    archive_path = os.path.join(ROOT, "Sources/Vendor/LogosAPI/libAPIClient.a")
+    if os.path.isfile(archive_path):
+        digest = hashlib.sha256(open(archive_path, "rb").read()).hexdigest()
+        if digest != "bab76fe5082e60488fa1f6ecde04f2e505feac322e0bd0e6c1bec325426d3b5a":
+            fail("libAPIClient.a não corresponde ao archive oficial v6.2.0 verificado")
+    if os.path.exists(os.path.join(ROOT, "Sources/Vendor/LogosAPI/libAPIClientLite.a")):
+        fail("a variante libAPIClientLite.a ainda existe no vendor do projeto")
+
+    notes.append("Logos API completa v6.2.0: hash, header C, token mascarado, gates de ativação e build conferidos")
 
 
 def check_site():

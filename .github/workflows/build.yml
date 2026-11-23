@@ -46,6 +46,7 @@ jobs:
           LOGOS_API_TOKEN: ${{ secrets.LOGOS_API_TOKEN }}
         run: |
           chmod +x Scripts/build_ipa.sh
+          echo "bab76fe5082e60488fa1f6ecde04f2e505feac322e0bd0e6c1bec325426d3b5a  Sources/Vendor/LogosAPI/libAPIClient.a" | shasum -a 256 --check
           ./Scripts/build_ipa.sh
 
       - name: Verify bundle layout and unsigned state
@@ -57,6 +58,7 @@ jobs:
           test -f "$APP/Info.plist"
           test -f "$APP/Catalog.plist"
           test -f "$APP/APIAuth.plist"
+          ! find "$APP" -type f -name '*.a' -print -quit | grep -q .
           test ! -d "$APP/_CodeSignature"
           test ! -f "$APP/embedded.mobileprovision"
           if ! nm -m "$APP/Frameworks/ffpatch.dylib" | awk '$NF == "_FFAppMain" && $(NF-1) == "external" && $(NF-2) != "private" { found=1 } END { exit !found }'; then
@@ -64,6 +66,17 @@ jobs:
             exit 1
           fi
           echo "FFAppMain exportado para dlsym: OK"
+          for symbol in _apiclient_set_token _apiclient_set_language _apiclient_paid _apiclient_get_package_name _apiclient_get_expired_at _apiclient_get_expired_at_local; do
+            if ! nm -g "$APP/Frameworks/ffpatch.dylib" | grep -Fq "$symbol"; then
+              echo "API completa não ligada dentro da dylib: falta $symbol" >&2
+              exit 1
+            fi
+          done
+          if otool -L "$APP/Frameworks/ffpatch.dylib" | grep -qi 'APIClient'; then
+            echo "A API deveria estar ligada estaticamente, sem dependência de dylib separada" >&2
+            exit 1
+          fi
+          echo "API completa ligada estaticamente; nenhum .a no bundle: OK"
           echo "IPA is unsigned and contains its masked catalog configuration."
           echo "--- linked images ---"
           otool -L "$APP/Frameworks/ffpatch.dylib"

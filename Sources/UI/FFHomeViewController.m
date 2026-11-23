@@ -289,9 +289,9 @@ static FFGame *FFNormalGame(FFManifest *manifest) {
 - (void)handleToggleForFunction:(FFFunction *)function
                            isOn:(BOOL)isOn
                             row:(FFFunctionRowView *)row {
-    if (isOn && ![FFLicense current].apiValidated) {
+    FFLicense *license = [FFLicense current];
+    if (isOn && !license.apiValidated) {
         [row setOn:NO animated:YES];
-        FFLicense *license = [FFLicense current];
         BOOL pending = license.apiValidationPending;
         if (!pending) {
             [license validateWithCompletion:nil];
@@ -319,52 +319,71 @@ static FFGame *FFNormalGame(FFManifest *manifest) {
     NSArray<FFFunction *> *siblings = (group != nil && group.exclusive)
         ? [self.manifest siblingsOfFunction:function] : @[];
 
-    dispatch_async(dispatch_get_global_queue(QOS_CLASS_USER_INITIATED, 0), ^{
-        NSError *error = nil;
-        BOOL success = NO;
+    dispatch_block_t performOperation = ^{
+        dispatch_async(dispatch_get_global_queue(QOS_CLASS_USER_INITIATED, 0), ^{
+            NSError *error = nil;
+            BOOL success = NO;
 
-        if (isOn) {
-            BOOL accessReady = FFSandboxAccessActive();
-            if (!accessReady) {
-                NSString *activationDetail = nil;
-                accessReady = FFSandboxActivate(&activationDetail);
+            if (isOn) {
+                BOOL accessReady = FFSandboxAccessActive();
                 if (!accessReady) {
-                    FFErrorCode code = FFSandboxOSIsSupported()
-                        ? FFErrorNoSandboxAccess : FFErrorUnsupportedOS;
-                    error = FFMakeError(code, @"%@", activationDetail ?: @"acesso indisponível");
-                }
-            }
-            if (accessReady) {
-                // Exclusive groups: restore siblings before applying this posture.
-                for (FFFunction *sibling in siblings) {
-                    if ([self.engine stateForFunction:sibling game:game] == FFFunctionStateApplied) {
-                        [self.engine restoreFunction:sibling game:game error:NULL];
+                    NSString *activationDetail = nil;
+                    accessReady = FFSandboxActivate(&activationDetail);
+                    if (!accessReady) {
+                        [license revokeApplyAuthorization];
+                        FFErrorCode code = FFSandboxOSIsSupported()
+                            ? FFErrorNoSandboxAccess : FFErrorUnsupportedOS;
+                        error = FFMakeError(code, @"%@", activationDetail ?: @"acesso indisponível");
                     }
                 }
-                success = [self.engine applyFunction:function game:game stats:NULL error:&error];
-            }
-        } else {
-            // Do not rerun a kernel activation just to deactivate. If startup is
-            // still activating, wait for it; then restore only with access already available.
-            FFSandboxWaitForActivation();
-            if (FFSandboxCurrentBackend() == FFSandboxBackendKernel && !FFSandboxAccessActive()) {
-                error = FFMakeError(FFErrorNoSandboxAccess, @"acesso ao container não está ativo");
+                if (accessReady) {
+                    // Exclusive groups: restore siblings before applying this posture.
+                    for (FFFunction *sibling in siblings) {
+                        if ([self.engine stateForFunction:sibling game:game] == FFFunctionStateApplied) {
+                            [self.engine restoreFunction:sibling game:game error:NULL];
+                        }
+                    }
+                    success = [self.engine applyFunction:function game:game stats:NULL error:&error];
+                }
             } else {
-                success = [self.engine restoreFunction:function game:game error:&error];
+                // Restoring originals remains available without API authorization.
+                FFSandboxWaitForActivation();
+                if (FFSandboxCurrentBackend() == FFSandboxBackendKernel && !FFSandboxAccessActive()) {
+                    error = FFMakeError(FFErrorNoSandboxAccess, @"acesso ao container não está ativo");
+                } else {
+                    success = [self.engine restoreFunction:function game:game error:&error];
+                }
             }
-        }
 
-        dispatch_async(dispatch_get_main_queue(), ^{
-            self.busy = NO;
-            [hud dismiss];
-            [self setRowsEnabled:YES];
-            [self reloadState];
-            [self showResultForFunction:function
-                                 isOn:isOn
-                                success:success
-                                  error:error];
+            dispatch_async(dispatch_get_main_queue(), ^{
+                self.busy = NO;
+                [hud dismiss];
+                [self setRowsEnabled:YES];
+                [self reloadState];
+                [self showResultForFunction:function
+                                     isOn:isOn
+                                    success:success
+                                      error:error];
+            });
         });
-    });
+    };
+
+    if (isOn) {
+        [license authorizeOperationWithCompletion:^(BOOL authorized) {
+            if (!authorized) {
+                self.busy = NO;
+                [hud dismiss];
+                [self setRowsEnabled:YES];
+                [row setOn:NO animated:YES];
+                [self reloadState];
+                [self presentSystemAlertWithMessage:@"A API não autorizou esta função. Verifique o acesso e tente novamente."];
+                return;
+            }
+            performOperation();
+        }];
+    } else {
+        performOperation();
+    }
 }
 
 - (void)showResultForFunction:(FFFunction *)function

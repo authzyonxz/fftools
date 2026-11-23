@@ -51,14 +51,14 @@ derived from other projects. It is not promotion.
 
 ## Build-time authentication library
 
-- **Logos API Authentication Lite** — author Bao Nguyen (`baontq23`), supplied
-  as `Sources/Vendor/LogosAPI/APIClient.h` and
-  `Sources/Vendor/LogosAPI/libAPIClientLite.a`; provenance: upstream release/tag
-  [`v6.2.0`](https://github.com/baontq23/Logos-API-Authentication/releases/tag/v6.2.0),
-  including the upstream `API (Lite Secure)` distribution.
-  The inspected upstream repository root and Lite directory contain no
-  `LICENSE` file, and its README does not state a license. **No license is
-  declared in the inspected upstream material; redistribution permission and
+- **Logos API Authentication v6.2.0** — author Bao Nguyen (`baontq23`), supplied
+  as `Sources/Vendor/LogosAPI/APIClient.h` and `Sources/Vendor/LogosAPI/libAPIClient.a`.
+  The files are copied byte-for-byte from the full upstream `API/` directory at
+  [`v6.2.0`](https://github.com/baontq23/Logos-API-Authentication/releases/tag/v6.2.0)
+  and the archive is linked statically into `ffpatch.dylib`; the `.a` is not
+  included as a separate file in the IPA. The upstream `API (Lite Secure)`
+  variant is not used. The inspected upstream repository has no `LICENSE` file
+  and its README does not state a license. **Redistribution permission and
   applicable terms therefore remain unresolved and should be confirmed with
   the rights holder.**
 

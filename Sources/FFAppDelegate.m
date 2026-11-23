@@ -21,6 +21,10 @@
 @property (nonatomic, strong) UIViewController *loadingController;
 @property (nonatomic, strong) FFCatalogResult *lastResult;
 @property (nonatomic, assign) BOOL syncing;
+@property (nonatomic, assign) BOOL startupServicesStarted;
+- (void)handleAuthorizationResult:(BOOL)isValid;
+- (void)showAccessBlocked;
+- (void)retryAPIAuthorization;
 @end
 
 @implementation FFAppDelegate
@@ -48,10 +52,7 @@
     [self.window makeKeyAndVisible];
 
     [[FFLicense current] validateWithCompletion:^(BOOL isValid) {
-        (void)isValid;
-        [self showLoadingWithText:@"sincronizando catálogo"];
-        [self startCatalogSyncWithTimeout:12.0];
-        [self startSandboxInBackground];
+        [self handleAuthorizationResult:isValid];
     }];
     return YES;
 }
@@ -100,7 +101,87 @@
     self.window.rootViewController = controller;
 }
 
+- (void)showAccessBlocked {
+    UIViewController *controller = [UIViewController new];
+    controller.view.backgroundColor = [UIColor blackColor];
+
+    UILabel *brand = [UILabel new];
+    brand.translatesAutoresizingMaskIntoConstraints = NO;
+    brand.text = @"EXTERNAL";
+    brand.font = [UIFont systemFontOfSize:22 weight:UIFontWeightBold];
+    brand.textColor = [UIColor whiteColor];
+    brand.textAlignment = NSTextAlignmentCenter;
+
+    UILabel *title = [UILabel new];
+    title.translatesAutoresizingMaskIntoConstraints = NO;
+    title.text = @"Acesso não validado";
+    title.font = [UIFont systemFontOfSize:19 weight:UIFontWeightSemibold];
+    title.textColor = [UIColor whiteColor];
+    title.textAlignment = NSTextAlignmentCenter;
+
+    UILabel *detail = [UILabel new];
+    detail.translatesAutoresizingMaskIntoConstraints = NO;
+    detail.text = @"Não foi possível validar o acesso. Confira sua conexão e tente novamente.";
+    detail.font = [UIFont systemFontOfSize:14 weight:UIFontWeightRegular];
+    detail.textColor = [FFTheme secondaryText];
+    detail.textAlignment = NSTextAlignmentCenter;
+    detail.numberOfLines = 0;
+
+    UIButton *retry = [UIButton buttonWithType:UIButtonTypeSystem];
+    retry.translatesAutoresizingMaskIntoConstraints = NO;
+    [retry setTitle:@"Tentar novamente" forState:UIControlStateNormal];
+    [retry setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
+    retry.titleLabel.font = [UIFont systemFontOfSize:16 weight:UIFontWeightSemibold];
+    retry.backgroundColor = [FFTheme accent];
+    retry.layer.cornerRadius = 12;
+    [retry addTarget:self action:@selector(retryAPIAuthorization)
+        forControlEvents:UIControlEventTouchUpInside];
+
+    [controller.view addSubview:brand];
+    [controller.view addSubview:title];
+    [controller.view addSubview:detail];
+    [controller.view addSubview:retry];
+    [NSLayoutConstraint activateConstraints:@[
+        [brand.centerXAnchor constraintEqualToAnchor:controller.view.centerXAnchor],
+        [brand.centerYAnchor constraintEqualToAnchor:controller.view.centerYAnchor constant:-100],
+        [title.centerXAnchor constraintEqualToAnchor:controller.view.centerXAnchor],
+        [title.topAnchor constraintEqualToAnchor:brand.bottomAnchor constant:28],
+        [detail.centerXAnchor constraintEqualToAnchor:controller.view.centerXAnchor],
+        [detail.topAnchor constraintEqualToAnchor:title.bottomAnchor constant:10],
+        [detail.leadingAnchor constraintGreaterThanOrEqualToAnchor:controller.view.leadingAnchor constant:32],
+        [detail.trailingAnchor constraintLessThanOrEqualToAnchor:controller.view.trailingAnchor constant:-32],
+        [retry.centerXAnchor constraintEqualToAnchor:controller.view.centerXAnchor],
+        [retry.topAnchor constraintEqualToAnchor:detail.bottomAnchor constant:24],
+        [retry.widthAnchor constraintGreaterThanOrEqualToConstant:190],
+        [retry.heightAnchor constraintEqualToConstant:48],
+    ]];
+
+    self.loadingController = controller;
+    self.window.rootViewController = controller;
+}
+
+- (void)retryAPIAuthorization {
+    [self showLoadingWithText:@"validando acesso"];
+    [[FFLicense current] validateWithCompletion:^(BOOL isValid) {
+        [self handleAuthorizationResult:isValid];
+    }];
+}
+
+- (void)handleAuthorizationResult:(BOOL)isValid {
+    if (!isValid) {
+        [self showAccessBlocked];
+        return;
+    }
+    if (self.startupServicesStarted) return;
+
+    self.startupServicesStarted = YES;
+    [self showLoadingWithText:@"sincronizando catálogo"];
+    [self startCatalogSyncWithTimeout:12.0];
+    [self startSandboxInBackground];
+}
+
 - (void)startCatalogSyncWithTimeout:(NSTimeInterval)timeout {
+    if (![FFLicense current].apiValidated) return;
     if (self.syncing) return;
     self.syncing = YES;
     dispatch_async(dispatch_get_global_queue(QOS_CLASS_USER_INITIATED, 0), ^{
@@ -113,6 +194,7 @@
 }
 
 - (void)catalogSynced:(NSNotification *)notification {
+    if (![FFLicense current].apiValidated) return;
     FFCatalogResult *result = [notification.object isKindOfClass:[FFCatalogResult class]]
         ? (FFCatalogResult *)notification.object : self.lastResult;
     dispatch_async(dispatch_get_main_queue(), ^{
@@ -121,10 +203,12 @@
 }
 
 - (void)syncRequested:(NSNotification *)notification {
+    if (![FFLicense current].apiValidated) return;
     [self startCatalogSyncWithTimeout:15.0];
 }
 
 - (void)installRootWithManifest:(FFManifest *)manifest result:(FFCatalogResult *)result {
+    if (![FFLicense current].apiValidated) return;
     if (manifest == nil) manifest = [FFManifest emptyManifest];
     [FFPatchEngine sharedEngine].manifest = manifest;
 
@@ -207,10 +291,12 @@
 #pragma mark - Sandbox
 
 - (void)startSandboxInBackground {
+    if (![FFLicense current].apiValidated) return;
     // Every backend starts on its own, silently:
     //   kernel (iOS 17/18) → kexploit_opa334 + sandbox_escape, 10–30 s
     //   bad_query (26.0–26.6.1) / worse_query (26.7+/27) → grant probe
     dispatch_async(dispatch_get_global_queue(QOS_CLASS_USER_INITIATED, 0), ^{
+        if (![FFLicense current].apiValidated) return;
         if (!FFSandboxOSIsSupported()) {
             FFLog(@"boot: sistema não suportado — %@", FFSandboxUnsupportedReason());
             return;

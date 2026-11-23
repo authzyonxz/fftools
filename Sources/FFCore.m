@@ -50,6 +50,7 @@ NSString *FFUserMessageForError(NSError *error) {
         case FFErrorTargetIsDirectory:   return @"Alvo inválido";
         case FFErrorDuplicateTarget:     return @"Arquivo duplicado";
         case FFErrorTargetNotFound:      return @"Arquivo não encontrado no jogo";
+        case FFErrorAccessDenied:        return @"Acesso não autorizado";
         default:                         return @"Falha na operação";
     }
 }

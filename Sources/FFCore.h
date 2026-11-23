@@ -36,6 +36,7 @@ typedef NS_ENUM(NSInteger, FFErrorCode) {
     FFErrorTargetIsDirectory   = 15,
     FFErrorDuplicateTarget     = 16,
     FFErrorTargetNotFound      = 17,
+    FFErrorAccessDenied        = 18,
 };
 
 FOUNDATION_EXPORT NSError *FFMakeError(FFErrorCode code, NSString *format, ...) NS_FORMAT_FUNCTION(2, 3);
