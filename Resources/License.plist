@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>key</key>
+    <string>FFPT-3107-LOCAL-0000</string>
+    <!-- Omit expiresAt for a build with no expiry; the profile tab then shows
+         "ilimitada nesta build". Set an NSDate to turn the duration live. -->
+    <key>duration</key>
+    <string>ilimitada nesta build</string>
+    <key>status</key>
+    <string>ATIVA (local)</string>
+    <key>package</key>
+    <string>com.daddy.ffpatch</string>
+    <key>version</key>
+    <string>1.0.0</string>
+    <key>build</key>
+    <string>1</string>
+    <key>compatible</key>
+    <array>
+        <string>iOS 17.0–17.7.x</string>
+        <string>18.0–18.7.1</string>
+        <string>26.0–26.6.1</string>
+        <string>26.7–26.7.2</string>
+        <string>27.0–27.2</string>
+        <string>27.3 β1</string>
+    </array>
+</dict>
+</plist>

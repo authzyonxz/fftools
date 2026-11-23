@@ -1,0 +1,43 @@
+name: build-ipa
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  ipa:
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Toolchain
+        run: |
+          xcodebuild -version
+          xcrun --sdk iphoneos --show-sdk-path
+
+      - name: Build unsigned IPA
+        run: |
+          chmod +x Scripts/build_ipa.sh
+          ./Scripts/build_ipa.sh
+
+      - name: Verify bundle layout
+        run: |
+          set -e
+          APP=build/Payload/FFPatch.app
+          test -x "$APP/FFPatch"
+          test -f "$APP/Frameworks/ffpatch.dylib"
+          test -f "$APP/Info.plist"
+          test -f "$APP/Payloads/manifest.json"
+          echo "--- linked images ---"
+          otool -L "$APP/Frameworks/ffpatch.dylib"
+          echo "--- architectures ---"
+          lipo -info "$APP/FFPatch" "$APP/Frameworks/ffpatch.dylib"
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: FFPatch-unsigned-ipa
+          path: build/*.ipa
+          if-no-files-found: error

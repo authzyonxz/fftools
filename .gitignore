@@ -1,0 +1,21 @@
+# build output
+build/
+.theos/
+obj/
+*.ipa
+*.dylib
+*.deb
+
+# python
+__pycache__/
+*.pyc
+
+# raw download cache used once to build the icons
+raw/
+ff_normal_source.jpg
+
+# macOS
+.DS_Store
+
+# windows
+Thumbs.db
