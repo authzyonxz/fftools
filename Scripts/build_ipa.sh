@@ -32,8 +32,7 @@ echo "== FFPatch $VERSION • SDK $SDK"
 
 rm -rf "$BUILD"
 mkdir -p "$APP/Frameworks" "$OBJ"
-
-INCLUDES=(-I"$ROOT/Sources" -I"$ROOT/Sources/Vendor")
+INCLUDES=(-I"$ROOT/Sources" -I"$ROOT/Sources/UI" -I"$ROOT/Sources/Vendor")
 C_ONLY_FLAGS=(-arch arm64 -miphoneos-version-min="$MIN_IOS" -isysroot "$SDK" -O2 -std=gnu17
               -Wno-unused-function)
 COMMON_FLAGS=(-arch arm64 -miphoneos-version-min="$MIN_IOS" -isysroot "$SDK" -O2
