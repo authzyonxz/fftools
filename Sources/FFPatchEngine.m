@@ -31,6 +31,15 @@ static NSString *const FFJournalStatusRolledBack = @"rolledBack";
 
 static NSInteger const FFJournalSchemaVersion = 1;
 
+static NSRecursiveLock *FFPatchEngineOperationLock(void) {
+    static NSRecursiveLock *lock;
+    static dispatch_once_t onceToken;
+    dispatch_once(&onceToken, ^{
+        lock = [NSRecursiveLock new];
+    });
+    return lock;
+}
+
 #pragma mark - Rule model
 
 @interface FFRule : NSObject
@@ -197,6 +206,9 @@ static NSInteger const FFJournalSchemaVersion = 1;
                  game:(FFGame *)game
                 stats:(FFPatchApplyStats **)stats
                 error:(NSError **)error {
+    NSRecursiveLock *operationLock = FFPatchEngineOperationLock();
+    [operationLock lock];
+    @try {
     if (!FFSandboxOSIsSupported()) {
         if (error) *error = FFMakeError(FFErrorUnsupportedOS, @"%@", FFSandboxUnsupportedReason());
         return NO;
@@ -523,6 +535,9 @@ static NSInteger const FFJournalSchemaVersion = 1;
     FFLog(@"apply: %@ → %@ OK (%lu arquivos, container %@)",
           function.name, game.displayName, (unsigned long)rules.count, container);
     return YES;
+    } @finally {
+        [operationLock unlock];
+    }
 }
 
 #pragma mark - Container search
@@ -712,6 +727,9 @@ static NSInteger const FFJournalSchemaVersion = 1;
 #pragma mark - Restore
 
 - (BOOL)restoreFunction:(FFFunction *)function game:(FFGame *)game error:(NSError **)error {
+    NSRecursiveLock *operationLock = FFPatchEngineOperationLock();
+    [operationLock lock];
+    @try {
     FFPatchReceipt *receipt = [self receiptForFunction:function game:game];
     if (receipt == nil || ![receipt.status isEqualToString:FFJournalStatusApplied]) {
         if (error) {
@@ -879,9 +897,15 @@ static NSInteger const FFJournalSchemaVersion = 1;
     FFLog(@"restore: %@ ← %@ OK (%lu arquivos)",
           function.name, game.displayName, (unsigned long)records.count);
     return YES;
+    } @finally {
+        [operationLock unlock];
+    }
 }
 
 - (BOOL)restoreAllWithError:(NSError **)error restoredCount:(NSUInteger *)restoredCount {
+    NSRecursiveLock *operationLock = FFPatchEngineOperationLock();
+    [operationLock lock];
+    @try {
     NSUInteger count = 0;
     for (FFPatchReceipt *receipt in [self allReceipts]) {
         if (![receipt.status isEqualToString:FFJournalStatusApplied]) continue;
@@ -900,9 +924,15 @@ static NSInteger const FFJournalSchemaVersion = 1;
     }
     if (restoredCount) *restoredCount = count;
     return YES;
+    } @finally {
+        [operationLock unlock];
+    }
 }
 
 - (BOOL)restoreAllForGame:(FFGame *)game error:(NSError **)error restoredCount:(NSUInteger *)restoredCount {
+    NSRecursiveLock *operationLock = FFPatchEngineOperationLock();
+    [operationLock lock];
+    @try {
     NSUInteger count = 0;
     for (NSString *functionID in [self appliedFunctionIDsForGame:game]) {
         for (FFGroup *group in self.manifest.groups) {
@@ -914,6 +944,9 @@ static NSInteger const FFJournalSchemaVersion = 1;
     }
     if (restoredCount) *restoredCount = count;
     return YES;
+    } @finally {
+        [operationLock unlock];
+    }
 }
 
 @end

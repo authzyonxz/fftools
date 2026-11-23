@@ -239,6 +239,16 @@ static BOOL FFSandboxProbeUncached(void) {
 static BOOL FFProbeCachedValue = NO;
 static NSDate *FFProbeCachedAt = nil;
 static BOOL FFProbeCachedValid = NO;
+static BOOL FFKernelActivationAttempted = NO;
+
+static NSLock *FFSandboxActivationLock(void) {
+    static NSLock *lock;
+    static dispatch_once_t onceToken;
+    dispatch_once(&onceToken, ^{
+        lock = [NSLock new];
+    });
+    return lock;
+}
 
 BOOL FFSandboxAccessActive(void) {
     [FFProbeLock() lock];
@@ -250,6 +260,8 @@ BOOL FFSandboxAccessActive(void) {
     }
     [FFProbeLock() unlock];
 
+    NSLock *activationLock = FFSandboxActivationLock();
+    [activationLock lock];
     BOOL value = FFSandboxProbeUncached();
 
     [FFProbeLock() lock];
@@ -257,9 +269,16 @@ BOOL FFSandboxAccessActive(void) {
     FFProbeCachedAt = [NSDate date];
     FFProbeCachedValid = YES;
     [FFProbeLock() unlock];
+    [activationLock unlock];
 
     FFLog(@"sandbox: probe %@ (%@)", value ? @"OK" : @"FAILED", FFSandboxBackendNameCurrent());
     return value;
+}
+
+void FFSandboxWaitForActivation(void) {
+    NSLock *activationLock = FFSandboxActivationLock();
+    [activationLock lock];
+    [activationLock unlock];
 }
 
 BOOL FFSandboxInvalidateCaches(void) {
@@ -274,7 +293,7 @@ BOOL FFSandboxInvalidateCaches(void) {
     return YES;
 }
 
-BOOL FFSandboxActivate(NSString **detailOut) {
+static BOOL FFSandboxActivateLocked(NSString **detailOut) {
     if (!FFSandboxOSIsSupported()) {
         if (detailOut) *detailOut = FFSandboxUnsupportedReason();
         return NO;
@@ -284,6 +303,17 @@ BOOL FFSandboxActivate(NSString **detailOut) {
     FFLog(@"exploit: ===== %@ backend =====", FFSandboxBackendName(backend));
 
     if (backend == FFSandboxBackendKernel) {
+        if (sandbox_access_is_active() == 1) {
+            FFSandboxInvalidateCaches();
+            if (detailOut) *detailOut = @"acesso já ativo";
+            return YES;
+        }
+        if (FFKernelActivationAttempted) {
+            if (detailOut) *detailOut = @"a ativação já foi tentada nesta sessão; nova tentativa bloqueada";
+            FFLog(@"kexploit: repetição bloqueada nesta sessão");
+            return NO;
+        }
+
         // Jailbroken devices patch the sandbox themselves: the chain result is
         // not attributable to us, so do not claim a state we cannot stand behind.
         BOOL looksJailbroken = [[NSFileManager defaultManager] fileExistsAtPath:@"/var/jb"] ||
@@ -298,6 +328,7 @@ BOOL FFSandboxActivate(NSString **detailOut) {
         }
 
         FFLog(@"kexploit: ===== STAGE 1/2: kernel r/w (kexploit_opa334) =====");
+        FFKernelActivationAttempted = YES;
         int kernelResult = kexploit_opa334();
         if (kernelResult != 0) {
             if (detailOut) *detailOut = [NSString stringWithFormat:
@@ -346,6 +377,18 @@ BOOL FFSandboxActivate(NSString **detailOut) {
     if (detailOut) *detailOut = ok ? [NSString stringWithFormat:@"%@ ativo", FFSandboxBackendName(backend)]
                                    : [NSString stringWithFormat:@"%@ recusou o probe", FFSandboxBackendName(backend)];
     if (ok) FFSandboxInvalidateCaches();
+    return ok;
+}
+
+BOOL FFSandboxActivate(NSString **detailOut) {
+    NSLock *activationLock = FFSandboxActivationLock();
+    [activationLock lock];
+    BOOL ok = NO;
+    @try {
+        ok = FFSandboxActivateLocked(detailOut);
+    } @finally {
+        [activationLock unlock];
+    }
     return ok;
 }
 

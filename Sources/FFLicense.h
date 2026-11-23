@@ -14,7 +14,7 @@ NS_ASSUME_NONNULL_BEGIN
 
 @property (nonatomic, copy) NSString *key;
 @property (nonatomic, copy) NSString *duration;          // "30 dias" / "expira em 23/12/2026"
-@property (nonatomic, copy) NSString *packageName;       // com.daddy.ffpatch
+@property (nonatomic, copy) NSString *packageName;       // com.external.app
 @property (nonatomic, copy) NSString *compatibleRanges;  // "iOS 17.0–18.7.1 · ..."
 @property (nonatomic, copy) NSString *build;             // "1 (0.1.0)"
 @property (nonatomic, copy) NSString *status;            // "ATIVA" / "EXPIRADA" / "LOCAL"

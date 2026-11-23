@@ -71,7 +71,7 @@ toggle ON
       path-or-name  caminho exato se existe; senão varre; senão cria
  7. backup de cada alvo (SHA-256) + journal "prepared"
  8. grant no diretório pai → temporário → fsync → rename → confere SHA-256
- 9. journal "applied" + recibo → alerta STATUS ✓ INJETADO COM SUCESSO
+  9. journal "applied" + recibo → alerta nativo: INJETADO COM SUCESSO
     falhou em qualquer passo → rollback exato
 ```
 
@@ -84,21 +84,17 @@ case-insensitive, symlink nunca é alvo.
 
 ![Mockup FUNÇÕES + alerta STATUS](docs/images/mockup.png)
 
-- **Início (casa)**: `FUNÇÕES`, cards FF Normal / FF Max (borda branca no
+- **Início (grade)**: `FUNÇÕES`, cards FF Normal / FF Max (borda branca no
   selecionado), seções por grupo, linhas com toggle.
   - ligado → **verde preenchido** (`UISwitch` verde);
-  - durante a operação → spinner; ao final → alerta `STATUS` com
-    `INJETADO COM SUCESSO` / `RESTAURADO COM SUCESSO` e botão `FECHAR`;
-  - erro → uma linha curta em português (`Jogo não instalado`,
-    `Sem permissão de acesso`, `Arquivo não encontrado no jogo`,
-    `Função já está ativa`, `Reinstale o jogo para continuar`), detalhe técnico
-    só no log;
+  - durante a operação → spinner; ao final → alerta padrão do iOS com
+    `INJETADO COM SUCESSO` / `RESTAURADO COM SUCESSO` e botão `Fechar`;
+  - erro → mensagem curta em português, sem ID interno/código técnico na tela;
   - função publicada em manutenção aparece como `EM MANUTENÇÃO`, desligada;
   - função que só existe para o outro jogo fica oculta.
 - **Perfil (pessoa)**: chave, duração, status, package, versões compatíveis,
-  build, modelo, iOS/build, backend, acesso, injeções ativas, versão do
-  catálogo, **SINCRONIZAR CATÁLOGO**, **RESTAURAR ORIGINAIS**,
-  **EXPORTAR DIAGNÓSTICO**.
+  build, modelo, iOS/build e backend; **SINCRONIZAR CATÁLOGO**,
+  **RESTAURAR ORIGINAIS** e **EXPORTAR DIAGNÓSTICO**.
 
 ## 4. Backends por versão
 
@@ -213,7 +209,8 @@ existe dentro da IPA.
 ## 8. Limites
 
 - Não é jailbreak: não instala bootstrap/daemon nem injeta código no jogo.
-- Cadeia de kernel pode falhar/reiniciar o app — herdado do backend.
+- A cadeia de kernel herdada ainda precisa de validação em aparelho; esta build
+  serializa a ativação e bloqueia uma segunda tentativa na mesma sessão.
 - Reinstalar o jogo muda o fingerprint do container: o restore recusa escrever
   no container novo em vez de arriscar estado inconsistente.
 - iOS 26.7+/27 exige App Group na assinatura (AltStore/SideStore/Sideloadly);

@@ -51,11 +51,14 @@ derived from other projects. It is not promotion.
 
 ## Artwork
 
-- Free Fire icon: supplied by the project owner (Garena asset).
-- Free Fire MAX icon: Google Play store listing artwork for
-  `com.dts.freefiremax`, downloaded for the in-app game card.
-  Both are Garena trademarks, used here only as visual identification inside a
-  personal research build; they are **not** covered by the GPL.
+- Free Fire Normal logo: supplied by the project owner at
+  <https://drive.google.com/file/d/1bQAPinz5iYpR7armWRE6O7-PcxG4UykC/view?usp=drivesdk>.
+- Free Fire MAX logo: supplied by the project owner at
+  <https://drive.google.com/file/d/15XLELuCjCOW66YqGompjmzjkPrD0HToO/view?usp=drivesdk>.
+- FFPatch app logo: supplied by the project owner at
+  <https://drive.google.com/file/d/1Gf7gV623_HoX3ERDXhWz77NvC9J5ntJ6/view?usp=drivesdk>.
+  The game logos are used only to identify the supported games inside the app;
+  the supplied artwork and Garena trademarks are **not** covered by the GPL.
 
 ## What FFPatch adds
 
@@ -65,7 +68,7 @@ derived from other projects. It is not promotion.
 - Raw-container payload model (`Payloads/<function>/<game>/<container path>`)
   replacing the `.3105` package format, with manifest-driven function IDs.
 - New UIKit UI (FUNÇÕES / PERFIL) built to the supplied design reference,
-  including the status alert with internal function ID.
+  with native system alerts that omit internal function IDs from the screen.
 - Restore-all, per-game receipts, container fingerprint checks, diagnostic
   export, and the license/profile surface.
 

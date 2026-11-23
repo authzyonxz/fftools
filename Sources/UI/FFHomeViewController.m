@@ -278,29 +278,37 @@ static NSString *const FFActiveGameDefaultsKey = @"FFActiveGameID";
 
     dispatch_async(dispatch_get_global_queue(QOS_CLASS_USER_INITIATED, 0), ^{
         NSError *error = nil;
-        NSUInteger fileCount = 0;
-        FFPatchApplyStats *stats = nil;
         BOOL success = NO;
 
-        if (!FFSandboxAccessActive()) {
-            FFSandboxActivate(NULL);
-        }
-
         if (isOn) {
-            // Exclusive groups (aimbot): only one posture may be injected at a
-            // time, so the siblings are restored before the new payload lands.
-            for (FFFunction *sibling in siblings) {
-                if ([self.engine stateForFunction:sibling game:game] == FFFunctionStateApplied) {
-                    [self.engine restoreFunction:sibling game:game error:NULL];
+            BOOL accessReady = FFSandboxAccessActive();
+            if (!accessReady) {
+                NSString *activationDetail = nil;
+                accessReady = FFSandboxActivate(&activationDetail);
+                if (!accessReady) {
+                    FFErrorCode code = FFSandboxOSIsSupported()
+                        ? FFErrorNoSandboxAccess : FFErrorUnsupportedOS;
+                    error = FFMakeError(code, @"%@", activationDetail ?: @"acesso indisponível");
                 }
             }
-            fileCount = [self.engine payloadFileCountForFunction:function game:game];
-            success = [self.engine applyFunction:function game:game stats:&stats error:&error];
-            if (success && stats != nil) fileCount = stats.fileCount;
+            if (accessReady) {
+                // Exclusive groups: restore siblings before applying this posture.
+                for (FFFunction *sibling in siblings) {
+                    if ([self.engine stateForFunction:sibling game:game] == FFFunctionStateApplied) {
+                        [self.engine restoreFunction:sibling game:game error:NULL];
+                    }
+                }
+                success = [self.engine applyFunction:function game:game stats:NULL error:&error];
+            }
         } else {
-            FFPatchReceipt *receipt = [self.engine receiptForFunction:function game:game];
-            fileCount = receipt.fileCount;
-            success = [self.engine restoreFunction:function game:game error:&error];
+            // Do not rerun a kernel activation just to deactivate. If startup is
+            // still activating, wait for it; then restore only with access already available.
+            FFSandboxWaitForActivation();
+            if (FFSandboxCurrentBackend() == FFSandboxBackendKernel && !FFSandboxAccessActive()) {
+                error = FFMakeError(FFErrorNoSandboxAccess, @"acesso ao container não está ativo");
+            } else {
+                success = [self.engine restoreFunction:function game:game error:&error];
+            }
         }
 
         dispatch_async(dispatch_get_main_queue(), ^{
@@ -311,8 +319,6 @@ static NSString *const FFActiveGameDefaultsKey = @"FFActiveGameID";
             [self showResultForFunction:function
                                  isOn:isOn
                                 success:success
-                                fileCount:fileCount
-                                  stats:stats
                                   error:error];
         });
     });
@@ -321,33 +327,31 @@ static NSString *const FFActiveGameDefaultsKey = @"FFActiveGameID";
 - (void)showResultForFunction:(FFFunction *)function
                          isOn:(BOOL)isOn
                       success:(BOOL)success
-                    fileCount:(NSUInteger)fileCount
-                        stats:(FFPatchApplyStats *)stats
                         error:(NSError *)error {
-    NSString *detail = [NSString stringWithFormat:@"ID %@ · %@ · %@ · %lu arquivo%@",
-                        function.funcID, function.name, self.activeGame.displayName,
-                        (unsigned long)fileCount, fileCount == 1 ? @"" : @"s"];
-    if (stats.usedContainerSearch) {
-        detail = [detail stringByAppendingFormat:@" · varredura: %lu entradas",
-                  (unsigned long)stats.scannedEntries];
-    }
-
     if (success) {
-        NSString *message = isOn ? @"INJETADO COM SUCESSO" : @"RESTAURADO COM SUCESSO";
-        [FFStatusAlertView showWithStyle:FFAlertStyleSuccess
-                                    title:@"STATUS"
-                                  message:message
-                                   detail:detail];
+        [self presentSystemAlertWithMessage:isOn ? @"INJETADO COM SUCESSO" : @"RESTAURADO COM SUCESSO"];
         return;
     }
 
     NSString *shortMessage = FFUserMessageForError(error);
     FFLog(@"ui: %@ %@ falhou — %@ (%@)", function.name, isOn ? @"apply" : @"restore",
           shortMessage, error.localizedDescription ?: @"sem detalhe");
-    [FFStatusAlertView showWithStyle:FFAlertStyleFailure
-                                title:@"STATUS"
-                              message:shortMessage.uppercaseString
-                               detail:[NSString stringWithFormat:@"ID %@ · %@", function.funcID, function.name]];
+    [self presentSystemAlertWithMessage:shortMessage.uppercaseString];
+}
+
+- (void)presentSystemAlertWithMessage:(NSString *)message {
+    UIAlertController *alert = [UIAlertController alertControllerWithTitle:nil
+                                                                   message:message
+                                                            preferredStyle:UIAlertControllerStyleAlert];
+    [alert addAction:[UIAlertAction actionWithTitle:@"Fechar"
+                                             style:UIAlertActionStyleDefault
+                                           handler:nil]];
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.18 * NSEC_PER_SEC)),
+                   dispatch_get_main_queue(), ^{
+        if (self.viewIfLoaded.window != nil && self.presentedViewController == nil) {
+            [self presentViewController:alert animated:YES completion:nil];
+        }
+    });
 }
 
 - (void)setRowsEnabled:(BOOL)enabled {

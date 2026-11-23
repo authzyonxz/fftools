@@ -57,7 +57,7 @@
 
     license.packageName = configured[@"package"]
         ?: bundle.bundleIdentifier
-        ?: @"com.daddy.ffpatch";
+        ?: @"com.external.app";
 
     NSArray *ranges = configured[@"compatible"];
     if ([ranges isKindOfClass:[NSArray class]] && ranges.count) {

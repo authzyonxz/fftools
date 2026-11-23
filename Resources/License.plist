@@ -11,11 +11,11 @@
     <key>status</key>
     <string>ATIVA (local)</string>
     <key>package</key>
-    <string>com.daddy.ffpatch</string>
+    <string>com.external.app</string>
     <key>version</key>
-    <string>1.1.0</string>
+    <string>1.1.2</string>
     <key>build</key>
-    <string>2</string>
+    <string>4</string>
     <key>compatible</key>
     <array>
         <string>iOS 17.0–17.7.x</string>

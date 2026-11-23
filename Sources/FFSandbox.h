@@ -49,6 +49,9 @@ BOOL FFSandboxAccessActive(void);
     access is usable afterwards. */
 BOOL FFSandboxActivate(NSString **_Nullable detailOut);
 
+/*! Waits for any in-flight sandbox activation or uncached probe to finish. */
+void FFSandboxWaitForActivation(void);
+
 /*! Drops the cached probe result and every cached worse_query token. */
 BOOL FFSandboxInvalidateCaches(void);
 

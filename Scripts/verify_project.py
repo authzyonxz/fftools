@@ -63,7 +63,7 @@ def check_plists():
     info_path = os.path.join(RESOURCES, "Info.plist")
     with open(info_path, "rb") as handle:
         info = plistlib.load(handle)
-    if info.get("CFBundleIdentifier") != "com.daddy.ffpatch":
+    if info.get("CFBundleIdentifier") != "com.external.app":
         fail("Info.plist: CFBundleIdentifier inesperado")
     if info.get("CFBundleExecutable") != "FFPatch":
         fail("Info.plist: CFBundleExecutable deve ser FFPatch (stub MH_EXECUTE)")
@@ -128,7 +128,10 @@ def check_sources():
         "Sources/UI/FFHomeViewController.m", "Sources/UI/FFProfileViewController.m",
         "launcher/main.c",
         "Scripts/build_ipa.sh", "Scripts/build_theos.sh", "Scripts/package_ipa_theos.sh",
+        "Scripts/make_icons.py",
         "Scripts/protect_config.py", "Scripts/verify_project.py",
+        "Resources/SourceArt/ff_normal.jpg", "Resources/SourceArt/ff_max.jpg",
+        "Resources/SourceArt/app_logo.jpg",
     ]
     for relative in required:
         if not os.path.isfile(os.path.join(ROOT, relative)):

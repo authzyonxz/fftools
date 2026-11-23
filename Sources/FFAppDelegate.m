@@ -155,8 +155,8 @@
     tabs.viewControllers = @[homeNavigation, profileNavigation];
 
     home.tabBarItem = [[UITabBarItem alloc] initWithTitle:@"Início"
-        image:[UIImage systemImageNamed:@"house"]
-        selectedImage:[UIImage systemImageNamed:@"house.fill"]];
+        image:[UIImage systemImageNamed:@"square.grid.2x2"]
+        selectedImage:[UIImage systemImageNamed:@"square.grid.2x2.fill"]];
     profile.tabBarItem = [[UITabBarItem alloc] initWithTitle:@"Perfil"
         image:[UIImage systemImageNamed:@"person"]
         selectedImage:[UIImage systemImageNamed:@"person.fill"]];

@@ -150,39 +150,8 @@
         [[FFValueRowView alloc] initWithTitle:@"iOS" value:license.deviceOS monospaced:NO],
         [[FFValueRowView alloc] initWithTitle:@"Build do sistema" value:license.deviceBuild monospaced:YES],
         [[FFValueRowView alloc] initWithTitle:@"Backend" value:license.sandboxBackend monospaced:YES],
-        [[FFValueRowView alloc] initWithTitle:@"Acesso ao container" value:license.accessStatus monospaced:NO],
     ];
     [stack addArrangedSubview:[self cardWithRows:deviceRows]];
-
-    // ---- patch state card --------------------------------------------------
-    NSUInteger applied = 0;
-    for (FFGame *game in self.manifest.games) {
-        applied += [self.engine appliedFunctionIDsForGame:game].count;
-    }
-    NSString *catalogPath = [[[FFCatalogClient sharedClient] cacheRoot]
-        stringByAppendingPathComponent:@"catalog.json"];
-    NSData *catalogData = [NSData dataWithContentsOfFile:catalogPath];
-    NSDictionary *catalogInfo = nil;
-    if (catalogData.length > 0) {
-        id parsed = [NSJSONSerialization JSONObjectWithData:catalogData options:0 error:NULL];
-        if ([parsed isKindOfClass:[NSDictionary class]]) catalogInfo = parsed;
-    }
-    NSString *catalogVersion = catalogInfo[@"version"] != nil
-        ? [NSString stringWithFormat:@"v%@", catalogInfo[@"version"]] : @"—";
-    NSString *catalogDate = [catalogInfo[@"updatedAt"] isKindOfClass:[NSString class]]
-        ? catalogInfo[@"updatedAt"] : @"—";
-
-    NSArray<FFValueRowView *> *patchRows = @[
-        [[FFValueRowView alloc] initWithTitle:@"Injeções ativas"
-                                        value:[NSString stringWithFormat:@"%lu", (unsigned long)applied]
-                                   monospaced:YES],
-        [[FFValueRowView alloc] initWithTitle:@"Catálogo" value:catalogVersion monospaced:YES],
-        [[FFValueRowView alloc] initWithTitle:@"Catálogo atualizado em" value:catalogDate monospaced:NO],
-        [[FFValueRowView alloc] initWithTitle:@"Log"
-                                        value:FFLogFilePath().lastPathComponent
-                                   monospaced:YES],
-    ];
-    [stack addArrangedSubview:[self cardWithRows:patchRows]];
 
     // ---- actions -----------------------------------------------------------
     UIButton *syncButton = [UIButton buttonWithType:UIButtonTypeSystem];
