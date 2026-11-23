@@ -6,8 +6,8 @@
 #
 # Saída:
 #   .theos/obj/.../ffpatch.dylib          (a app inteira)
-#   launcher/.theos/obj/.../ffpatch_launcher  (stub MH_EXECUTE)
-#   build/FFPatch-<versão>-unsigned.ipa   (quando não passa --no-ipa)
+#   launcher/.theos/obj/.../External        (stub MH_EXECUTE)
+#   build/External-iOS-<versão>-unsigned.ipa (quando não passa --no-ipa)
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -34,7 +34,7 @@ make -C "$ROOT/launcher" clean all
 
 echo
 echo "dylib   : $(find "$ROOT/.theos" -name 'ffpatch.dylib' | head -n 1)"
-echo "launcher: $(find "$ROOT/launcher/.theos" -name 'ffpatch_launcher' | head -n 1)"
+echo "launcher: $(find "$ROOT/launcher/.theos" -name 'External' | head -n 1)"
 
 if [[ "$MAKE_IPA" -eq 1 ]]; then
     echo

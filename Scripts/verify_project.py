@@ -65,8 +65,12 @@ def check_plists():
         info = plistlib.load(handle)
     if info.get("CFBundleIdentifier") != "com.external.app":
         fail("Info.plist: CFBundleIdentifier inesperado")
-    if info.get("CFBundleExecutable") != "FFPatch":
-        fail("Info.plist: CFBundleExecutable deve ser FFPatch (stub MH_EXECUTE)")
+    if info.get("CFBundleExecutable") != "External":
+        fail("Info.plist: CFBundleExecutable deve ser External (stub MH_EXECUTE)")
+    if info.get("CFBundleDisplayName") != "External iOS":
+        fail("Info.plist: CFBundleDisplayName deve ser External iOS")
+    if info.get("CFBundleName") != "External iOS":
+        fail("Info.plist: CFBundleName deve ser External iOS")
     icons = info.get("CFBundleIcons", {}).get("CFBundlePrimaryIcon", {}).get("CFBundleIconFiles", [])
     if "AppIcon60x60" not in icons:
         fail("Info.plist: CFBundleIconFiles sem AppIcon60x60")
@@ -158,6 +162,9 @@ def check_logos_api_integration():
         ),
         ".github/workflows/build.yml": (
             "LOGOS_API_TOKEN: ${{ secrets.LOGOS_API_TOKEN }}", "APIAuth.plist",
+        ),
+        "Sources/FFLicense.m": (
+            "[client start:", "init:^{", "onCheckPackage:", "getExpiryDate",
         ),
     }
     for relative, expected in references.items():

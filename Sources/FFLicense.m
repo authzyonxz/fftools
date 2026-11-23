@@ -11,6 +11,35 @@
 
 NSNotificationName const FFLicenseDidUpdateNotification = @"FFLicenseDidUpdateNotification";
 
+static NSString *FFLicenseDisplayExpiry(id value) {
+    if (![value isKindOfClass:[NSString class]]) return @"—";
+    NSString *candidate = [(NSString *)value stringByTrimmingCharactersInSet:
+        [NSCharacterSet whitespaceAndNewlineCharacterSet]];
+    if (candidate.length == 0) return @"—";
+
+    NSString *normalized = candidate.lowercaseString;
+    NSSet<NSString *> *unlimitedValues = [NSSet setWithArray:
+        @[@"unlimited", @"lifetime", @"permanent", @"ilimitada", @"vitalícia"]];
+    if ([unlimitedValues containsObject:normalized]) {
+        return @"Ilimitada";
+    }
+
+    NSArray<NSString *> *formats = @[
+        @"yyyy-MM-dd'T'HH:mm:ssXXXXX", @"yyyy-MM-dd'T'HH:mm:ss.SSSXXXXX",
+        @"yyyy-MM-dd HH:mm:ss", @"yyyy-MM-dd", @"yyyy/MM/dd",
+        @"dd/MM/yyyy", @"MM/dd/yyyy", @"dd-MM-yyyy", @"yyyyMMdd",
+        @"dd MMM yyyy", @"MMM d, yyyy"
+    ];
+    NSDateFormatter *formatter = [NSDateFormatter new];
+    formatter.locale = [[NSLocale alloc] initWithLocaleIdentifier:@"en_US_POSIX"];
+    formatter.lenient = NO;
+    for (NSString *format in formats) {
+        formatter.dateFormat = format;
+        if ([formatter dateFromString:candidate] != nil) return candidate;
+    }
+    return @"—";
+}
+
 @interface FFLicense ()
 @property (nonatomic, assign, readwrite) BOOL apiValidated;
 @property (nonatomic, assign, readwrite) BOOL apiValidationPending;
@@ -110,18 +139,33 @@ NSNotificationName const FFLicenseDidUpdateNotification = @"FFLicenseDidUpdateNo
     [client strictMode:YES];
     [client silentMode:YES];
     [client hideUI:YES];
-    [client onCheckPackage:^(NSDictionary *header) {
-        (void)header;
-        NSString *package = [client getPackageName];
-        NSString *expiry = [client getExpiryDate];
-        if (expiry.length == 0) expiry = [client getExpiredAt];
-        [self finishValidationWithSuccess:YES
-                                  package:package.length ? package : @"—"
-                                   expiry:expiry.length ? expiry : @"—"];
-    } onFailure:^(NSDictionary *error) {
-        (void)error;
-        [self finishValidationWithSuccess:NO package:@"—" expiry:@"—"];
+
+    // Start the Lite client first. The package check runs only from its init callback.
+    [client start:^{
+        FFLog(@"auth: Logos API Lite starting");
+    } init:^{
+        FFLog(@"auth: Logos API Lite initialized");
+        [client onCheckPackage:^(NSDictionary *header) {
+            (void)header;
+            NSString *package = [client getPackageName];
+            NSString *expiry = FFLicenseDisplayExpiry([client getExpiryDate]);
+            [self finishValidationWithSuccess:YES
+                                      package:package.length ? package : @"—"
+                                       expiry:expiry];
+        } onFailure:^(NSDictionary *error) {
+            (void)error;
+            [self finishValidationWithSuccess:NO package:@"—" expiry:@"—"];
+        }];
     }];
+
+    // Do not leave launch waiting forever if the client cannot reach its service.
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(20 * NSEC_PER_SEC)),
+                   dispatch_get_main_queue(), ^{
+        if (self.apiValidationPending) {
+            FFLog(@"auth: Logos API Lite timed out");
+            [self finishValidationWithSuccess:NO package:@"—" expiry:@"—"];
+        }
+    });
 }
 
 - (void)finishValidationWithSuccess:(BOOL)success package:(NSString *)package expiry:(NSString *)expiry {

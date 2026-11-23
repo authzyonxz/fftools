@@ -1,5 +1,5 @@
 //  launcher/main.c
-//  FFPatch — the IPA's MH_EXECUTE binary.
+//  External — the IPA's MH_EXECUTE binary.
 //
 //  All app logic lives in Frameworks/ffpatch.dylib (Sources/*.m). This stub
 //  exists for one reason: dyld only launches MH_EXECUTE binaries, so a plain
@@ -14,15 +14,15 @@
 
 typedef int (*FFAppMainFn)(int argc, char **argv);
 
-static int FFPatchLoadAndRun(const char *dylibPath, int argc, char **argv, int *exitStatus) {
+static int ExternalLoadAndRun(const char *dylibPath, int argc, char **argv, int *exitStatus) {
     void *handle = dlopen(dylibPath, RTLD_NOW | RTLD_GLOBAL);
     if (handle == NULL) {
-        fprintf(stderr, "ffpatch_launcher: dlopen(%s) falhou: %s\n", dylibPath, dlerror());
+        fprintf(stderr, "External: dlopen(%s) falhou: %s\n", dylibPath, dlerror());
         return 0;
     }
     FFAppMainFn entry = (FFAppMainFn)dlsym(handle, "FFAppMain");
     if (entry == NULL) {
-        fprintf(stderr, "ffpatch_launcher: símbolo FFAppMain ausente em %s\n", dylibPath);
+        fprintf(stderr, "External: símbolo FFAppMain ausente em %s\n", dylibPath);
         return 0;
     }
     if (exitStatus != NULL) *exitStatus = entry(argc, argv);
@@ -33,7 +33,7 @@ int main(int argc, char **argv) {
     char executablePath[4096];
     uint32_t size = (uint32_t)sizeof(executablePath);
     if (_NSGetExecutablePath(executablePath, &size) != 0) {
-        fprintf(stderr, "ffpatch_launcher: não resolveu o próprio caminho\n");
+        fprintf(stderr, "External: não resolveu o próprio caminho\n");
         return 1;
     }
 
@@ -50,13 +50,13 @@ int main(int argc, char **argv) {
     // Preferred layout: App.app/Frameworks/ffpatch.dylib (matches Theos and
     // Xcode's Frameworks folder and what the packaging script produces).
     snprintf(candidate, sizeof(candidate), "%s/Frameworks/ffpatch.dylib", directory);
-    if (FFPatchLoadAndRun(candidate, argc, argv, &appExitStatus)) return appExitStatus;
+    if (ExternalLoadAndRun(candidate, argc, argv, &appExitStatus)) return appExitStatus;
 
     // Fallback: dylib dropped next to the executable.
     snprintf(candidate, sizeof(candidate), "%s/ffpatch.dylib", directory);
-    if (FFPatchLoadAndRun(candidate, argc, argv, &appExitStatus)) return appExitStatus;
+    if (ExternalLoadAndRun(candidate, argc, argv, &appExitStatus)) return appExitStatus;
 
-    fprintf(stderr, "ffpatch_launcher: ffpatch.dylib não encontrada em %s (Frameworks/ e raiz)\n",
+    fprintf(stderr, "External: ffpatch.dylib não encontrada em %s (Frameworks/ e raiz)\n",
             directory);
     return 1;
 }

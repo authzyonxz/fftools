@@ -3,7 +3,7 @@
 #
 #   ./Scripts/build_ipa.sh
 #
-# Produces build/Payload/FFPatch.app and build/FFPatch-<version>-unsigned.ipa.
+# Produces build/Payload/External iOS.app and build/External-iOS-<version>-unsigned.ipa.
 # Sign afterwards with ESign / Sideloadly / AltStore (the App Group entitlement
 # matters on iOS 26.7+ / 27.x — see README).
 #
@@ -14,7 +14,7 @@ set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 BUILD="$ROOT/build"
-APP="$BUILD/Payload/FFPatch.app"
+APP="$BUILD/Payload/External iOS.app"
 OBJ="$BUILD/obj"
 MIN_IOS="15.0"
 
@@ -77,7 +77,7 @@ fi
 
 echo "== compilando launcher (MH_EXECUTE)"
 "$CLANG" -arch arm64 -miphoneos-version-min="$MIN_IOS" -isysroot "$SDK" -O2 \
-    -o "$APP/FFPatch" "$ROOT/launcher/main.c"
+    -o "$APP/External" "$ROOT/launcher/main.c"
 
 echo "== copiando recursos"
 cp "$ROOT/Resources/Info.plist" "$APP/Info.plist"
@@ -113,9 +113,9 @@ else
 fi
 
 echo "== empacotando"
-(cd "$BUILD" && zip -qry "FFPatch-$VERSION-unsigned.ipa" Payload)
+(cd "$BUILD" && zip -qry "External-iOS-$VERSION-unsigned.ipa" Payload)
 
 echo
 echo "OK  $APP"
-echo "OK  $BUILD/FFPatch-$VERSION-unsigned.ipa"
-du -sh "$APP" "$BUILD/FFPatch-$VERSION-unsigned.ipa" 2>/dev/null || true
+echo "OK  $BUILD/External-iOS-$VERSION-unsigned.ipa"
+du -sh "$APP" "$BUILD/External-iOS-$VERSION-unsigned.ipa" 2>/dev/null || true

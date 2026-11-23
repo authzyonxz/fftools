@@ -51,8 +51,8 @@ jobs:
       - name: Verify bundle layout and unsigned state
         run: |
           set -e
-          APP=build/Payload/FFPatch.app
-          test -x "$APP/FFPatch"
+          APP="build/Payload/External iOS.app"
+          test -x "$APP/External"
           test -f "$APP/Frameworks/ffpatch.dylib"
           test -f "$APP/Info.plist"
           test -f "$APP/Catalog.plist"
@@ -68,12 +68,12 @@ jobs:
           echo "--- linked images ---"
           otool -L "$APP/Frameworks/ffpatch.dylib"
           echo "--- architectures ---"
-          lipo -info "$APP/FFPatch" "$APP/Frameworks/ffpatch.dylib"
+          lipo -info "$APP/External" "$APP/Frameworks/ffpatch.dylib"
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: FFPatch-unsigned-ipa
+          name: External-iOS-unsigned-ipa
           path: build/*.ipa
           if-no-files-found: error
           retention-days: 1

@@ -28,7 +28,7 @@
 - (BOOL)application:(UIApplication *)application
     didFinishLaunchingWithOptions:(NSDictionary *)launchOptions {
     FFProtectInstall();
-    FFLog(@"boot: FFPatch iniciando. iOS %@ build %@ model %@ backend %@",
+    FFLog(@"boot: External iniciando. iOS %@ build %@ model %@ backend %@",
           FFOSVersionString(), FFOSBuildString(), FFDeviceModelIdentifier(),
           FFSandboxBackendNameCurrent());
 
@@ -44,12 +44,15 @@
                                                  name:@"FFCatalogSyncRequestNotification"
                                                object:nil];
 
-    [self showLoadingWithText:@"sincronizando catálogo"];
+    [self showLoadingWithText:@"inicializando API"];
     [self.window makeKeyAndVisible];
 
-    [[FFLicense current] validateWithCompletion:nil];
-    [self startCatalogSyncWithTimeout:12.0];
-    [self startSandboxInBackground];
+    [[FFLicense current] validateWithCompletion:^(BOOL isValid) {
+        (void)isValid;
+        [self showLoadingWithText:@"sincronizando catálogo"];
+        [self startCatalogSyncWithTimeout:12.0];
+        [self startSandboxInBackground];
+    }];
     return YES;
 }
 

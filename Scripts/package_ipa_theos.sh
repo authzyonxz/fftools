@@ -5,19 +5,19 @@
 #   ./Scripts/package_ipa_theos.sh                  # empacota a IPA unsigned
 #
 # Não precisa de Mac: Theos (Linux/WSL/macOS/device) já gera a dylib e o stub;
-# este script só monta Payload/FFPatch.app e zipa. A assinatura fica para
+# este script só monta Payload/External iOS.app e zipa. A assinatura fica para
 # ESign / AltStore / Sideloadly no aparelho.
 #
 # Opcional:
 #   FFPATCH_DYLIB=/caminho/ffpatch.dylib
-#   FFPATCH_LAUNCHER=/caminho/ffpatch_launcher
+#   EXTERNAL_LAUNCHER=/caminho/External
 #   OUTPUT_VERSION=1.0.1
 #   LDID=/path/ldid            → assina dylib+app com ldid (ad-hoc) se existir
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 BUILD="$ROOT/build"
-APP="$BUILD/Payload/FFPatch.app"
+APP="$BUILD/Payload/External iOS.app"
 VERSION="${OUTPUT_VERSION:-$(python3 -c "import plistlib,sys;print(plistlib.load(open(sys.argv[1],'rb'))['CFBundleShortVersionString'])" "$ROOT/Resources/Info.plist" 2>/dev/null || echo 1.0.0)}"
 
 find_artifact() {
@@ -38,8 +38,8 @@ DYLIB="$(find_artifact ffpatch.dylib "${FFPATCH_DYLIB:-}")" || {
     echo "erro: ffpatch.dylib não encontrada. rode primeiro Scripts/build_theos.sh" >&2
     exit 1
 }
-LAUNCHER="$(find_artifact ffpatch_launcher "${FFPATCH_LAUNCHER:-}")" || {
-    echo "erro: ffpatch_launcher não encontrado. rode primeiro Scripts/build_theos.sh" >&2
+LAUNCHER="$(find_artifact External "${EXTERNAL_LAUNCHER:-}")" || {
+    echo "erro: launcher External não encontrado. rode primeiro Scripts/build_theos.sh" >&2
     exit 1
 }
 
@@ -51,8 +51,8 @@ rm -rf "$BUILD"
 mkdir -p "$APP/Frameworks"
 python3 "$ROOT/Scripts/generate_api_auth.py"
 
-cp "$LAUNCHER" "$APP/FFPatch"
-chmod 755 "$APP/FFPatch"
+cp "$LAUNCHER" "$APP/External"
+chmod 755 "$APP/External"
 cp "$DYLIB" "$APP/Frameworks/ffpatch.dylib"
 
 cp "$ROOT/Resources/Info.plist" "$APP/Info.plist"
@@ -76,13 +76,13 @@ printf 'APPL????' > "$APP/PkgInfo"
 if [[ -n "${LDID:-}" && -x "$LDID" ]]; then
     echo "== assinando ad-hoc com ldid"
     "$LDID" -S"$ROOT/Resources/FFPatch.entitlements" "$APP/Frameworks/ffpatch.dylib"
-    "$LDID" -S"$ROOT/Resources/FFPatch.entitlements" "$APP/FFPatch"
+    "$LDID" -S"$ROOT/Resources/FFPatch.entitlements" "$APP/External"
 else
     echo "== ldid ausente: artefatos ficam unsigned (normal — ESign/AltStore assina)"
 fi
 
 echo "== checando layout"
-for required in "$APP/FFPatch" "$APP/Frameworks/ffpatch.dylib" "$APP/Info.plist" "$APP/Catalog.plist" "$APP/APIAuth.plist"; do
+for required in "$APP/External" "$APP/Frameworks/ffpatch.dylib" "$APP/Info.plist" "$APP/Catalog.plist" "$APP/APIAuth.plist"; do
     [[ -e "$required" ]] || { echo "erro: falta $required" >&2; exit 1; }
 done
 
@@ -91,13 +91,13 @@ if command -v strip >/dev/null 2>&1; then
 fi
 
 if command -v file >/dev/null 2>&1; then
-    file "$APP/FFPatch" | head -n 1
+    file "$APP/External" | head -n 1
     file "$APP/Frameworks/ffpatch.dylib" | head -n 1
 fi
 
 echo "== empacotando"
-(cd "$BUILD" && zip -qry "FFPatch-$VERSION-unsigned.ipa" Payload)
+(cd "$BUILD" && zip -qry "External-iOS-$VERSION-unsigned.ipa" Payload)
 
 echo
 echo "OK  $APP"
-echo "OK  $BUILD/FFPatch-$VERSION-unsigned.ipa"
+echo "OK  $BUILD/External-iOS-$VERSION-unsigned.ipa"
