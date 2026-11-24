@@ -58,6 +58,11 @@ void FFSandboxClearKernelCrashGuard(void);
 /*! Drops the cached probe result and every cached worse_query token. */
 BOOL FFSandboxInvalidateCaches(void);
 
+/*! YES when the app is signed as com.apple.mobile.MobileHouseArrest.
+    That identity is what makes the MHA-C2 container workflow (and, on iOS 26,
+    the bad_query tokens) work — it is the 3105 recipe. */
+BOOL FFSandboxHostIsMobileHouseArrest(void);
+
 /*! App-Group entitlement string the signer gave us, or nil. Only worse_query
     needs it. */
 NSString *_Nullable FFSandboxAppGroup(void);

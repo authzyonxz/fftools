@@ -1,20 +1,5 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
-<dict>
-    <!--
-      worse_query (iOS 26.7+ / 27.x) needs an App Group. The name here is a
-      placeholder: AltStore / SideStore / Sideloadly with a free Apple ID creates
-      its own group and re-signs the app, and the runtime reads whichever group
-      it actually received via SecTaskCopyValueForEntitlement (worse_query.m).
-      A wildcard provisioning profile cannot carry this entitlement.
-
-      On iOS 17/18 (kernel backend) and iOS 26.0–26.6.1 (bad_query) nothing here
-      is required at runtime.
-    -->
-    <key>com.apple.security.application-groups</key>
-    <array>
-        <string>group.com.daddy.ffpatch</string>
-    </array>
-</dict>
+<dict/>
 </plist>

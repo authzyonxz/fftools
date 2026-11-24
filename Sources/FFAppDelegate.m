@@ -31,9 +31,11 @@
 - (BOOL)application:(UIApplication *)application
     didFinishLaunchingWithOptions:(NSDictionary *)launchOptions {
     FFProtectInstall();
-    FFLog(@"boot: External iniciando. iOS %@ build %@ model %@ backend %@",
+    FFLog(@"boot: External iniciando. iOS %@ build %@ model %@ backend %@ bundle=%@ mha=%d",
           FFOSVersionString(), FFOSBuildString(), FFDeviceModelIdentifier(),
-          FFSandboxBackendNameCurrent());
+          FFSandboxBackendNameCurrent(),
+          [NSBundle mainBundle].bundleIdentifier ?: @"?",
+          (int)FFSandboxHostIsMobileHouseArrest());
 
     self.window = [[UIWindow alloc] initWithFrame:[UIScreen mainScreen].bounds];
     self.window.backgroundColor = [UIColor blackColor];

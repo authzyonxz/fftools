@@ -82,6 +82,30 @@ static NSString *const FFMCMetadataFileName  = @".com.apple.mobile_container_man
     NSMutableArray<NSString *> *attempts = [NSMutableArray array];
     NSString *resolved = nil;
 
+    // 0. MHA-C2: when the app is signed as com.apple.mobile.MobileHouseArrest
+    //    (the 3105 recipe), containermanagerd trusts it and hands the container
+    //    over directly. This is the primary path on iOS 26.x — no exploit
+    //    token needed for the lookup.
+    if (FFSandboxHostIsMobileHouseArrest()) {
+        NSString *mhaError = nil;
+        NSString *mhaPath = MCMActivateContainerPath(kind == FFContainerKindData ? 2 : 1,
+                                                     bundleID, NO, &mhaError);
+        if (mhaPath.length > 0) {
+            NSString *candidate = (kind == FFContainerKindBundle)
+                ? [self firstAppBundleInDirectory:mhaPath bundleID:bundleID]
+                : [FFLaunchServicesStore canonicalContainerPath:mhaPath];
+            BOOL shapeOK = (kind == FFContainerKindBundle)
+                ? candidate.length > 0
+                : [FFLaunchServicesStore isDataContainerPath:candidate];
+            if (shapeOK) {
+                FFLog(@"container: %@ → %@ (MHA-C2)", bundleID, candidate);
+                [self remember:candidate forKey:key];
+                return candidate;
+            }
+        }
+        [attempts addObject:[NSString stringWithFormat:@"MHA-C2: %@", mhaError ?: @"sem caminho"]];
+    }
+
     // 1. lsd's CSStore. On iOS 26.7+/27 this is the only source that still
     //    pairs a bundle id with its data container when MCM refuses and the
     //    per-container metadata plist is root-owned/unreadable.

