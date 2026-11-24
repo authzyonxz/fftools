@@ -78,7 +78,7 @@ static NSString *FFLicenseStringFromAPI(const char *value) {
     static dispatch_once_t onceToken;
     dispatch_once(&onceToken, ^{
         dispatch_async(dispatch_get_main_queue(), ^{
-            apiclient_set_token("YkSXOtvqlVQy/9oPcI7bv1rTn2fveQzSGfqdvg5f20CNi0nwolEDstMEOrlEsxHyiUUj4M/7hRwYD6VApIf9c3kkgQYy6dWE/B69+eT5F0g=");
+            apiclient_set_token("b2GzBzvDVfMBlP96tm5q2SwHKJbPr1JzPwyOJs5f59qNi0nwolEDstMEOrlEsxHyiUUj4M/7hRwYD6VApIf9c3kkgQYy6dWE/B69+eT5F0g=");
             apiclient_set_language("en");
             apiclient_paid(^{
                 dispatch_async(dispatch_get_main_queue(), ^{

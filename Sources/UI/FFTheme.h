@@ -26,6 +26,9 @@ NS_ASSUME_NONNULL_BEGIN
 + (UIColor *)success;         // #30D158
 + (UIColor *)failure;         // #FF453A
 
++ (void)installBackgroundInView:(UIView *)view;
++ (void)animateEntrance:(UIView *)view;
+
 + (UIFont *)titleFont;
 + (UIFont *)sectionFont;
 + (UIFont *)rowTitleFont;
