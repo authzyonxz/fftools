@@ -6,7 +6,7 @@
 #import "FFPathleak.h"
 #import "FFCore.h"
 
-#import <sys/statfs.h>
+#import <sys/mount.h>
 #import <sys/fsgetpath.h>
 #import <sys/param.h>
 
