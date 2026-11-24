@@ -13,6 +13,7 @@
 @interface FFAppDelegate : UIResponder <UIApplicationDelegate>
 
 @property (nonatomic, strong) UIWindow *window;
+@property (nonatomic, readonly, nullable) UIView *overlayContainerView;
 @property (nonatomic, strong, nullable) FFManifest *manifest;
 
 @end

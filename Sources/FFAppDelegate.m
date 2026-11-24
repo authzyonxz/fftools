@@ -85,19 +85,17 @@
     self.contentController = controller;
 }
 
+- (UIView *)overlayContainerView {
+    return self.contentController.viewIfLoaded;
+}
+
 - (BOOL)apiInterfaceIsVisible {
     UIViewController *host = self.window.rootViewController;
-    if (host.presentedViewController != nil || host.transitionCoordinator != nil ||
+    // Wait for actual presentations and transitions, not arbitrary subviews,
+    // keyboard windows, or persistent decorative views owned by the SDK.
+    return host.presentedViewController != nil || host.transitionCoordinator != nil ||
         self.contentController.presentedViewController != nil ||
-        self.contentController.transitionCoordinator != nil) return YES;
-    for (UIView *view in host.view.subviews) {
-        if (view != self.contentController.view && !view.hidden && view.alpha > 0.01) return YES;
-    }
-    for (UIWindow *window in self.window.windowScene.windows) {
-        if (window != self.window && window.isKeyWindow &&
-            !window.hidden && window.alpha > 0.01) return YES;
-    }
-    return NO;
+        self.contentController.transitionCoordinator != nil;
 }
 
 - (void)finishAuthorizedStartupWhenAPIIsIdle {

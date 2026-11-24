@@ -129,7 +129,9 @@ static NSString *FFLicenseStringFromAPI(const char *value) {
 
         dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(20 * NSEC_PER_SEC)),
                        dispatch_get_main_queue(), ^{
-            finishOnce(NO, @"—", @"—");
+            // This is only an application-side diagnostic. The SDK owns its
+            // timeouts and UI; a user may still be entering their key here.
+            if (!completed) FFLog(@"auth: still waiting for the API callback after 20 seconds");
         });
 
         apiclient_paid(^{

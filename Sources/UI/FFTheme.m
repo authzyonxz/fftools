@@ -4,6 +4,7 @@
 //
 
 #import "FFTheme.h"
+#import "FFAppDelegate.h"
 
 @implementation FFTheme
 
@@ -69,34 +70,25 @@
 }
 
 + (UIWindow *)presentingWindow {
-    for (UIScene *scene in [UIApplication sharedApplication].connectedScenes) {
-        if (![scene isKindOfClass:[UIWindowScene class]]) continue;
-        UIWindowScene *windowScene = (UIWindowScene *)scene;
-        if (windowScene.activationState != UISceneActivationStateForegroundActive &&
-            windowScene.activationState != UISceneActivationStateForegroundInactive) {
-            continue;
-        }
-        for (UIWindow *window in windowScene.windows) {
-            if (window.isKeyWindow && !window.hidden) return window;
-        }
-        if (windowScene.windows.count) return windowScene.windows.firstObject;
-    }
-    UIWindow *legacy = [UIApplication sharedApplication].keyWindow;
-    if (legacy != nil) return legacy;
-    // Last resort: the first window of the app delegate.
-    return [UIApplication sharedApplication].windows.firstObject;
+    id delegate = [UIApplication sharedApplication].delegate;
+    if (![delegate isKindOfClass:[FFAppDelegate class]]) return nil;
+    return [(FFAppDelegate *)delegate window];
 }
 
 + (BOOL)attachOverlay:(UIView *)overlay {
-    UIWindow *window = [self presentingWindow];
-    if (window == nil) return NO;
+    id delegate = [UIApplication sharedApplication].delegate;
+    if (![delegate isKindOfClass:[FFAppDelegate class]]) return NO;
+    UIView *container = [(FFAppDelegate *)delegate overlayContainerView];
+    if (container == nil || container.window == nil) return NO;
+    // Application HUDs belong below the stable SDK presentation host.
+    // Never attach them to whichever window the SDK has made key.
     overlay.translatesAutoresizingMaskIntoConstraints = NO;
-    [window addSubview:overlay];
+    [container addSubview:overlay];
     [NSLayoutConstraint activateConstraints:@[
-        [overlay.topAnchor constraintEqualToAnchor:window.topAnchor],
-        [overlay.bottomAnchor constraintEqualToAnchor:window.bottomAnchor],
-        [overlay.leadingAnchor constraintEqualToAnchor:window.leadingAnchor],
-        [overlay.trailingAnchor constraintEqualToAnchor:window.trailingAnchor],
+        [overlay.topAnchor constraintEqualToAnchor:container.topAnchor],
+        [overlay.bottomAnchor constraintEqualToAnchor:container.bottomAnchor],
+        [overlay.leadingAnchor constraintEqualToAnchor:container.leadingAnchor],
+        [overlay.trailingAnchor constraintEqualToAnchor:container.trailingAnchor],
     ]];
     return YES;
 }
