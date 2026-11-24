@@ -223,16 +223,29 @@ static NSDate *FFLSMissAt;
 
 #pragma mark - Directory helpers (grant-aware)
 
-static NSArray<NSString *> *FFLSListDirectory(NSString *directory) {
+/*! Plain listing only — used where a token is already held or where a walk
+    would be wasted (the caller decides whether pathleak is warranted). */
+static NSArray<NSString *> *FFLSListDirectoryCheap(NSString *directory) {
     if (directory.length == 0) return @[];
     NSArray<NSString *> *names = [[NSFileManager defaultManager]
         contentsOfDirectoryAtPath:directory error:NULL];
-    if (names != nil) return names;
+    return names ?: @[];
+}
+
+static NSArray<NSString *> *FFLSListDirectory(NSString *directory) {
+    if (directory.length == 0) return @[];
+    NSArray<NSString *> *names = FFLSListDirectoryCheap(directory);
+    if (names.count > 0) return names;
 
     // Never grant here: the roots walked below are parent directories, and a
-    // grant on a non-container path returns -6 while still costing a swap.
-    // The caller grants the container whose Caches it is about to read.
-    return FFPathleakListNames(directory, 2000000);
+    // grant on a non-container path returns -6/-4 while still costing a swap.
+    // The inode walk is only worth it on the worse_query backends, where the
+    // parent listing is the only source left; 26.x resolves through bad_query
+    // metadata instead, so do not burn the 2M-inode sweep there.
+    if (FFSandboxCurrentBackend() == FFSandboxBackendWorseQuery) {
+        return FFPathleakListNames(directory, 2000000);
+    }
+    return @[];
 }
 
 static NSData *FFLSReadFile(NSString *path) {
@@ -272,7 +285,7 @@ typedef struct {
 static void FFLSInspectDirectory(NSString *directory, NSMutableArray<NSDictionary *> *found) {
     NSMutableSet<NSString *> *visited = nil;
     (void)visited;
-    for (NSString *name in FFLSListDirectory(directory)) {
+    for (NSString *name in FFLSListDirectoryCheap(directory)) {
         if (![name hasPrefix:@"com.apple.LaunchServices-"] || ![name hasSuffix:@".csstore"]) continue;
         NSString *path = [directory stringByAppendingPathComponent:name];
         NSDictionary *attributes = [[NSFileManager defaultManager]

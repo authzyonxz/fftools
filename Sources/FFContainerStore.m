@@ -255,54 +255,82 @@ static NSString *const FFMCMetadataFileName  = @".com.apple.mobile_container_man
                                kind:(FFContainerKind)kind
                          attemptLog:(NSMutableArray<NSString *> *)attempts {
     NSString *root = (kind == FFContainerKindData) ? FFDataContainerRoot : FFBundleContainerRoot;
+    BOOL worseQuery = FFSandboxCurrentBackend() == FFSandboxBackendWorseQuery;
 
     NSArray<NSString *> *entries = [[NSFileManager defaultManager]
         contentsOfDirectoryAtPath:root error:NULL];
-    if (entries.count == 0) {
-        // The app-data root is not itself grantable on worse_query (-6), so a
-        // grant round-trip there only costs a Caches swap. Try the plain
-        // listing once more after one grant attempt, then fall through to the
-        // inode walk below.
-        if (FFSandboxCurrentBackend() != FFSandboxBackendWorseQuery) {
-            int64_t handle = FFSandboxGrantPath(root, NO, NULL);
+
+    // One token on the app-data root is held for the whole scan: under
+    // bad_query/kernel that token also covers the plain reads of the
+    // containers below it (path-scoped tokens), so the scan does not need a
+    // grant per application. On worse_query the root is not a container and the
+    // grant is skipped (-6) — that backend resolves via LaunchServices.
+    int64_t rootGrant = -1;
+    if (entries.count == 0 && !worseQuery) {
+        // Walk up until bad_query accepts a path; an accepted ancestor covers
+        // the whole subtree, so the listing then works.
+        NSString *cursor = root;
+        while (cursor.length > 1) {
+            rootGrant = FFSandboxGrantPath(cursor, NO, NULL);
+            if (rootGrant < 0) {
+                cursor = [cursor stringByDeletingLastPathComponent];
+                continue;
+            }
             entries = [[NSFileManager defaultManager] contentsOfDirectoryAtPath:root error:NULL];
-            if (handle >= 0) FFSandboxReleaseHandle(handle);
+            if (entries.count > 0) break;
+            FFSandboxReleaseHandle(rootGrant);
+            rootGrant = -1;
+            cursor = [cursor stringByDeletingLastPathComponent];
         }
     }
-    if (entries.count == 0) {
+    if (entries.count == 0 && worseQuery) {
         entries = FFPathleakListNames(root, 2000000);
-        if (entries.count > 0) {
-            [attempts addObject:[NSString stringWithFormat:
-                @"metadata scan: %lu entrada(s) via pathleak", (unsigned long)entries.count]];
-        }
     }
     if (entries.count == 0) {
         [attempts addObject:@"metadata scan: diretório ilegível"];
         return nil;
     }
 
-    NSArray<NSString *> *sorted = [entries sortedArrayUsingSelector:@selector(compare:)];
-    for (NSString *entry in sorted) {
-        if ([[NSUUID alloc] initWithUUIDString:entry] == nil) continue;
-        NSString *directory = [root stringByAppendingPathComponent:entry];
-        NSString *metadataPath = [directory stringByAppendingPathComponent:FFMCMetadataFileName];
-        NSDictionary *metadata = FFReadPlist(metadataPath);
-        NSString *identifier = metadata[@"MCMMetadataIdentifier"];
-        if (identifier.length == 0 || ![identifier isEqualToString:bundleID]) continue;
+    NSString *result = nil;
+    @try {
+        NSArray<NSString *> *sorted = [entries sortedArrayUsingSelector:@selector(compare:)];
+        NSUInteger inspected = 0;
+        for (NSString *entry in sorted) {
+            if (inspected++ > 600) break;   // bound the scan on huge devices
+            if ([[NSUUID alloc] initWithUUIDString:entry] == nil) continue;
+            NSString *directory = [root stringByAppendingPathComponent:entry];
+            NSString *metadataPath = [directory stringByAppendingPathComponent:FFMCMetadataFileName];
 
-        if (kind == FFContainerKindData) {
-            NSString *canonical = [FFLaunchServicesStore canonicalContainerPath:directory];
-            if ([FFLaunchServicesStore isDataContainerPath:canonical]) return canonical;
-            continue;
+            NSDictionary *metadata = FFReadPlist(metadataPath);
+            if (metadata == nil) {
+                int64_t containerGrant = FFSandboxGrantPath(directory, NO, NULL);
+                metadata = FFReadPlist(metadataPath);
+                if (containerGrant >= 0) FFSandboxReleaseHandle(containerGrant);
+            }
+            NSString *identifier = metadata[@"MCMMetadataIdentifier"];
+            if (identifier.length == 0 || ![identifier isEqualToString:bundleID]) continue;
+
+            if (kind == FFContainerKindData) {
+                NSString *canonical = [FFLaunchServicesStore canonicalContainerPath:directory];
+                if ([FFLaunchServicesStore isDataContainerPath:canonical]) {
+                    result = canonical;
+                    break;
+                }
+                continue;
+            }
+            NSString *app = [self firstAppBundleInDirectory:directory bundleID:bundleID];
+            if (app.length) {
+                result = app;
+                break;
+            }
         }
-        NSString *app = [self firstAppBundleInDirectory:directory bundleID:bundleID];
-        if (app.length) return app;
+    } @finally {
+        if (rootGrant >= 0) FFSandboxReleaseHandle(rootGrant);
     }
 
-    [attempts addObject:@"metadata scan: nenhum match"];
-    return nil;
+    if (result.length == 0) [attempts addObject:@"metadata scan: nenhum match"];
+    return result;
 }
-
 #pragma mark - Helpers
 
 - (NSString *)firstAppBundleInDirectory:(NSString *)directory bundleID:(NSString *)bundleID {

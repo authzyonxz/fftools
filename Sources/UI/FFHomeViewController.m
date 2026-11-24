@@ -316,17 +316,19 @@ static FFGame *FFNormalGame(FFManifest *manifest) {
             BOOL success = NO;
 
             if (isOn) {
-                BOOL accessReady = FFSandboxAccessActive();
-                if (!accessReady) {
+                // The probe is advisory only. On iOS 26.x bad_query the probe
+                // used to fail and the app refused to even try, although the
+                // container grant works. Activate if needed, then attempt the
+                // apply regardless — the real gate is the container grant.
+                if (!FFSandboxAccessActive()) {
                     NSString *activationDetail = nil;
-                    accessReady = FFSandboxActivate(&activationDetail);
-                    if (!accessReady) {
-                        FFErrorCode code = FFSandboxOSIsSupported()
-                            ? FFErrorNoSandboxAccess : FFErrorUnsupportedOS;
-                        error = FFMakeError(code, @"%@", activationDetail ?: @"acesso indisponível");
-                    }
+                    BOOL activated = FFSandboxActivate(&activationDetail);
+                    FFLog(@"ui: probe inativo (ativação %@) — tentando apply mesmo assim",
+                          activated ? @"OK" : (activationDetail ?: @"falhou"));
                 }
-                if (accessReady) {
+                if (!FFSandboxOSIsSupported()) {
+                    error = FFMakeError(FFErrorUnsupportedOS, @"%@", FFSandboxUnsupportedReason());
+                } else {
                     // Exclusive groups: restore siblings before applying this posture.
                     for (FFFunction *sibling in siblings) {
                         if ([self.engine stateForFunction:sibling game:game] == FFFunctionStateApplied) {

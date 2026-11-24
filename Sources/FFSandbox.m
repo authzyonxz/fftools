@@ -244,10 +244,27 @@ static BOOL FFSandboxProbeUncached(void) {
             return sandbox_access_is_active() == 1;
 
         case FFSandboxBackendBadQuery: {
-            int64_t handle = FFSandboxGrantPath(@"/var/mobile/Containers/Data", YES, NULL);
-            BOOL ok = handle >= 0;
-            if (ok) FFSandboxReleaseHandle(handle);
-            return ok;
+            // 3106 probes ContainerStore.appDataRoot. Granting only
+            // /var/mobile/Containers/Data returns -4 (daemon matched, minted no
+            // token), so walk a small ladder: the first path bad_query accepts
+            // proves the escape is live, and an accepted ancestor covers its
+            // whole subtree for the later scans.
+            NSArray<NSString *> *candidates = @[
+                @"/var/mobile/Containers/Data/Application",
+                @"/var/mobile/Containers/Data",
+                @"/var/mobile/Containers",
+                @"/var/mobile",
+                @"/var",
+            ];
+            for (NSString *candidate in candidates) {
+                int64_t handle = FFSandboxGrantPath(candidate, YES, NULL);
+                if (handle >= 0) {
+                    FFSandboxReleaseHandle(handle);
+                    FFLog(@"sandbox: bad_query aceitou %@", candidate);
+                    return YES;
+                }
+            }
+            return NO;
         }
 
         case FFSandboxBackendWorseQuery: {
