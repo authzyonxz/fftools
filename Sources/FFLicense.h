@@ -21,7 +21,6 @@ FOUNDATION_EXPORT NSNotificationName const FFLicenseDidUpdateNotification;
 @property (nonatomic, copy) NSString *build;
 @property (nonatomic, copy) NSString *status;             // API validation status.
 @property (nonatomic, assign, readonly) BOOL apiValidated;
-@property (nonatomic, assign, readonly) BOOL apiValidationPending;
 
 /* Device rows shown under the profile card. */
 @property (nonatomic, copy) NSString *deviceModel;
@@ -31,10 +30,7 @@ FOUNDATION_EXPORT NSNotificationName const FFLicenseDidUpdateNotification;
 @property (nonatomic, copy) NSString *accessStatus;
 
 + (instancetype)current;
-- (void)validateWithCompletion:(nullable void (^)(BOOL isValid))completion;
-- (void)authorizeOperationWithCompletion:(nullable void (^)(BOOL authorized))completion;
-- (BOOL)consumeApplyAuthorization;
-- (void)revokeApplyAuthorization;
+- (void)startWithCompletion:(nullable dispatch_block_t)completion;
 - (NSString *)summaryText;
 
 @end

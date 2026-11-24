@@ -164,8 +164,8 @@ def check_logos_api_integration():
             "apiclient_set_token", "apiclient_paid(",
             "apiclient_get_package_name", "apiclient_get_expired_at",
         ),
-        "Sources/FFPatchEngine.m": ("consumeApplyAuthorization", "FFErrorAccessDenied"),
-        "Sources/FFAppDelegate.m": ("handleAuthorizationResult", "showAccessBlocked"),
+        "Sources/FFPatchEngine.m": ("apiValidated", "FFErrorAccessDenied"),
+        "Sources/FFAppDelegate.m": ("startWithCompletion", "startupServicesStarted"),
     }
     for relative, expected in references.items():
         path = os.path.join(ROOT, relative)

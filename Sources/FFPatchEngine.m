@@ -210,7 +210,7 @@ static NSRecursiveLock *FFPatchEngineOperationLock(void) {
     NSRecursiveLock *operationLock = FFPatchEngineOperationLock();
     [operationLock lock];
     @try {
-    if (![[FFLicense current] consumeApplyAuthorization]) {
+    if (![FFLicense current].apiValidated) {
         if (error) *error = FFMakeError(FFErrorAccessDenied, @"A API não autorizou esta ativação");
         return NO;
     }

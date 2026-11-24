@@ -91,9 +91,8 @@ the requirement of this project.
 
 ## Authentication integration update
 
-Replaced the header and full static library with the v6.2.0 release assets.
-Removed custom language and hidden UI / strict / silent overrides.
-Preserved the existing 20-second application timeout at the owner's request.
-Configured the supplied package token directly in apiclient_set_token().
-Removed the authentication secret and plist build dependency.
-The upstream header and library remain unmodified.
+The complete v6.2.0 release assets are unmodified and hash-verified.
+Application initialization sets the supplied token and English language, then
+calls the official paid flow once. Custom authentication timers, retries,
+per-operation authentication and API UI polling were removed from the app.
+The SDK retains its own behavior for authentication and package/key enforcement.

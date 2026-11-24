@@ -292,11 +292,6 @@ static FFGame *FFNormalGame(FFManifest *manifest) {
     FFLicense *license = [FFLicense current];
     if (isOn && !license.apiValidated) {
         [row setOn:NO animated:YES];
-        BOOL pending = license.apiValidationPending;
-        [self reloadState];
-        [self presentSystemAlertWithMessage:pending
-            ? @"A validação do acesso está em andamento. Tente novamente em instantes."
-            : @"Não foi possível validar o acesso. Verifique a conexão e tente novamente."];
         return;
     }
     if (self.busy) {
@@ -326,7 +321,6 @@ static FFGame *FFNormalGame(FFManifest *manifest) {
                     NSString *activationDetail = nil;
                     accessReady = FFSandboxActivate(&activationDetail);
                     if (!accessReady) {
-                        [license revokeApplyAuthorization];
                         FFErrorCode code = FFSandboxOSIsSupported()
                             ? FFErrorNoSandboxAccess : FFErrorUnsupportedOS;
                         error = FFMakeError(code, @"%@", activationDetail ?: @"acesso indisponível");
@@ -364,22 +358,7 @@ static FFGame *FFNormalGame(FFManifest *manifest) {
         });
     };
 
-    if (isOn) {
-        [license authorizeOperationWithCompletion:^(BOOL authorized) {
-            if (!authorized) {
-                self.busy = NO;
-                [hud dismiss];
-                [self setRowsEnabled:YES];
-                [row setOn:NO animated:YES];
-                [self reloadState];
-                [self presentSystemAlertWithMessage:@"A API não autorizou esta função. Verifique o acesso e tente novamente."];
-                return;
-            }
-            performOperation();
-        }];
-    } else {
-        performOperation();
-    }
+    performOperation();
 }
 
 - (void)showResultForFunction:(FFFunction *)function

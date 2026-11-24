@@ -19,16 +19,11 @@
 @interface FFAppDelegate ()
 @property (nonatomic, strong) UITabBarController *tabs;
 @property (nonatomic, strong) UIViewController *contentController;
-@property (nonatomic, assign) BOOL awaitingAPIInterface;
 @property (nonatomic, strong) UIViewController *loadingController;
 @property (nonatomic, strong) FFCatalogResult *lastResult;
 @property (nonatomic, assign) BOOL syncing;
 @property (nonatomic, assign) BOOL startupServicesStarted;
-- (void)handleAuthorizationResult:(BOOL)isValid;
-- (void)showAccessBlocked;
-- (void)retryAPIAuthorization;
 - (void)installContentController:(UIViewController *)controller;
-- (void)finishAuthorizedStartupWhenAPIIsIdle;
 @end
 
 @implementation FFAppDelegate
@@ -55,8 +50,11 @@
     [self showLoadingWithText:@"inicializando API"];
     [self.window makeKeyAndVisible];
 
-    [[FFLicense current] validateWithCompletion:^(BOOL isValid) {
-        [self handleAuthorizationResult:isValid];
+    [[FFLicense current] startWithCompletion:^{
+        self.startupServicesStarted = YES;
+        [self showLoadingWithText:@"sincronizando catálogo"];
+        [self startCatalogSyncWithTimeout:12.0];
+        [self startSandboxInBackground];
     }];
     return YES;
 }
@@ -87,37 +85,6 @@
 
 - (UIView *)overlayContainerView {
     return self.contentController.viewIfLoaded;
-}
-
-- (BOOL)apiInterfaceIsVisible {
-    UIViewController *host = self.window.rootViewController;
-    // Wait for actual presentations and transitions, not arbitrary subviews,
-    // keyboard windows, or persistent decorative views owned by the SDK.
-    return host.presentedViewController != nil || host.transitionCoordinator != nil ||
-        self.contentController.presentedViewController != nil ||
-        self.contentController.transitionCoordinator != nil;
-}
-
-- (void)finishAuthorizedStartupWhenAPIIsIdle {
-    if (!self.awaitingAPIInterface) return;
-    if (![FFLicense current].apiValidated) {
-        self.awaitingAPIInterface = NO;
-        [self showAccessBlocked];
-        return;
-    }
-    if ([self apiInterfaceIsVisible]) {
-        __weak typeof(self) weakSelf = self;
-        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.1 * NSEC_PER_SEC)),
-                       dispatch_get_main_queue(), ^{
-            [weakSelf finishAuthorizedStartupWhenAPIIsIdle];
-        });
-        return;
-    }
-    self.awaitingAPIInterface = NO;
-    self.startupServicesStarted = YES;
-    [self showLoadingWithText:@"sincronizando catálogo"];
-    [self startCatalogSyncWithTimeout:12.0];
-    [self startSandboxInBackground];
 }
 
 - (void)showLoadingWithText:(NSString *)text {
@@ -160,85 +127,6 @@
 
     self.loadingController = controller;
     [self installContentController:controller];
-}
-
-- (void)showAccessBlocked {
-    UIViewController *controller = [UIViewController new];
-    controller.view.backgroundColor = [UIColor blackColor];
-
-    UILabel *brand = [UILabel new];
-    brand.translatesAutoresizingMaskIntoConstraints = NO;
-    brand.text = @"EXTERNAL";
-    brand.font = [UIFont systemFontOfSize:22 weight:UIFontWeightBold];
-    brand.textColor = [UIColor whiteColor];
-    brand.textAlignment = NSTextAlignmentCenter;
-
-    UILabel *title = [UILabel new];
-    title.translatesAutoresizingMaskIntoConstraints = NO;
-    title.text = @"Acesso não validado";
-    title.font = [UIFont systemFontOfSize:19 weight:UIFontWeightSemibold];
-    title.textColor = [UIColor whiteColor];
-    title.textAlignment = NSTextAlignmentCenter;
-
-    UILabel *detail = [UILabel new];
-    detail.translatesAutoresizingMaskIntoConstraints = NO;
-    detail.text = @"Não foi possível validar o acesso. Confira sua conexão e tente novamente.";
-    detail.font = [UIFont systemFontOfSize:14 weight:UIFontWeightRegular];
-    detail.textColor = [FFTheme secondaryText];
-    detail.textAlignment = NSTextAlignmentCenter;
-    detail.numberOfLines = 0;
-
-    UIButton *retry = [UIButton buttonWithType:UIButtonTypeSystem];
-    retry.translatesAutoresizingMaskIntoConstraints = NO;
-    [retry setTitle:@"Tentar novamente" forState:UIControlStateNormal];
-    [retry setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
-    retry.titleLabel.font = [UIFont systemFontOfSize:16 weight:UIFontWeightSemibold];
-    retry.backgroundColor = [FFTheme accent];
-    retry.layer.cornerRadius = 12;
-    [retry addTarget:self action:@selector(retryAPIAuthorization)
-        forControlEvents:UIControlEventTouchUpInside];
-
-    [controller.view addSubview:brand];
-    [controller.view addSubview:title];
-    [controller.view addSubview:detail];
-    [controller.view addSubview:retry];
-    [NSLayoutConstraint activateConstraints:@[
-        [brand.centerXAnchor constraintEqualToAnchor:controller.view.centerXAnchor],
-        [brand.centerYAnchor constraintEqualToAnchor:controller.view.centerYAnchor constant:-100],
-        [title.centerXAnchor constraintEqualToAnchor:controller.view.centerXAnchor],
-        [title.topAnchor constraintEqualToAnchor:brand.bottomAnchor constant:28],
-        [detail.centerXAnchor constraintEqualToAnchor:controller.view.centerXAnchor],
-        [detail.topAnchor constraintEqualToAnchor:title.bottomAnchor constant:10],
-        [detail.leadingAnchor constraintGreaterThanOrEqualToAnchor:controller.view.leadingAnchor constant:32],
-        [detail.trailingAnchor constraintLessThanOrEqualToAnchor:controller.view.trailingAnchor constant:-32],
-        [retry.centerXAnchor constraintEqualToAnchor:controller.view.centerXAnchor],
-        [retry.topAnchor constraintEqualToAnchor:detail.bottomAnchor constant:24],
-        [retry.widthAnchor constraintGreaterThanOrEqualToConstant:190],
-        [retry.heightAnchor constraintEqualToConstant:48],
-    ]];
-
-    self.loadingController = controller;
-    [self installContentController:controller];
-}
-
-- (void)retryAPIAuthorization {
-    [self showLoadingWithText:@"validando acesso"];
-    [[FFLicense current] validateWithCompletion:^(BOOL isValid) {
-        [self handleAuthorizationResult:isValid];
-    }];
-}
-
-- (void)handleAuthorizationResult:(BOOL)isValid {
-    if (!isValid) {
-        [self showAccessBlocked];
-        return;
-    }
-    if (self.startupServicesStarted || self.awaitingAPIInterface) return;
-    self.awaitingAPIInterface = YES;
-    // Allow the API callback to finish scheduling its success presentation.
-    dispatch_async(dispatch_get_main_queue(), ^{
-        [self finishAuthorizedStartupWhenAPIIsIdle];
-    });
 }
 
 - (void)startCatalogSyncWithTimeout:(NSTimeInterval)timeout {
