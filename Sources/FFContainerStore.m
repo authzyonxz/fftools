@@ -6,6 +6,8 @@
 #import "FFContainerStore.h"
 #import "FFCore.h"
 #import "FFSandbox.h"
+#import "FFLaunchServicesStore.h"
+#import "FFPathleak.h"
 
 #import "Vendor/mcm_bridge.h"
 #import "Vendor/worse_query.h"
@@ -46,6 +48,7 @@ static NSString *const FFMCMetadataFileName  = @".com.apple.mobile_container_man
     [_lock lock];
     [_cache removeAllObjects];
     [_lock unlock];
+    [FFLaunchServicesStore invalidateSnapshot];
 }
 
 - (NSString *)cacheKeyForBundleID:(NSString *)bundleID kind:(FFContainerKind)kind {
@@ -74,21 +77,24 @@ static NSString *const FFMCMetadataFileName  = @".com.apple.mobile_container_man
     [_lock lock];
     NSString *cached = _cache[key];
     [_lock unlock];
-    if (cached.length > 0 && [self pathIsDirectory:cached]) return cached;
+    if (cached.length > 0 && [self isUsableContainerPath:cached kind:kind]) return cached;
 
     NSMutableArray<NSString *> *attempts = [NSMutableArray array];
     NSString *resolved = nil;
 
-    // 1. worse_query container index (iOS 26.7+ / 27).
-    resolved = [self lookupViaWorseQueryIndex:bundleID kind:kind attemptLog:attempts];
-    if (resolved.length) {
-        FFLog(@"container: %@ → %@ (worse_query index)", bundleID, resolved);
-        [self remember:resolved forKey:key];
-        return resolved;
+    // 1. lsd's CSStore. On iOS 26.7+/27 this is the only source that still
+    //    pairs a bundle id with its data container when MCM refuses and the
+    //    per-container metadata plist is root-owned/unreadable.
+    if (kind == FFContainerKindData) {
+        resolved = [self lookupViaLaunchServices:bundleID attemptLog:attempts];
+        if (resolved.length) {
+            FFLog(@"container: %@ → %@ (LaunchServices)", bundleID, resolved);
+            [self remember:resolved forKey:key];
+            return resolved;
+        }
     }
 
-    // 2. MobileContainerManager query (activation optional — the path alone is
-    //    useful because the write itself goes through the sandbox grant).
+    // 2. MobileContainerManager query.
     resolved = [self lookupViaMCM:bundleID kind:kind attemptLog:attempts];
     if (resolved.length) {
         FFLog(@"container: %@ → %@ (MCM)", bundleID, resolved);
@@ -96,7 +102,15 @@ static NSString *const FFMCMetadataFileName  = @".com.apple.mobile_container_man
         return resolved;
     }
 
-    // 3. Metadata plist scan.
+    // 3. worse_query container index (identifier → path) and its reverse.
+    resolved = [self lookupViaWorseQueryIndex:bundleID kind:kind attemptLog:attempts];
+    if (resolved.length) {
+        FFLog(@"container: %@ → %@ (worse_query index)", bundleID, resolved);
+        [self remember:resolved forKey:key];
+        return resolved;
+    }
+
+    // 4. Plain filesystem metadata scan (last resort; needs a readable root).
     resolved = [self lookupViaMetadataScan:bundleID kind:kind attemptLog:attempts];
     if (resolved.length) {
         FFLog(@"container: %@ → %@ (metadata scan)", bundleID, resolved);
@@ -120,47 +134,52 @@ static NSString *const FFMCMetadataFileName  = @".com.apple.mobile_container_man
     [_lock unlock];
 }
 
+/*! A resolved path is usable when its shape is right and it can be stat'ed,
+    OR when the shape is right but the sandbox still refuses stat — because a
+    worse_query grant issued later will open it. Never discard a shape-valid
+    LaunchServices path just because open() is denied before a grant. */
+- (BOOL)isUsableContainerPath:(NSString *)path kind:(FFContainerKind)kind {
+    if (path.length == 0) return NO;
+    NSString *canonical = [FFLaunchServicesStore canonicalContainerPath:path];
+    if (kind == FFContainerKindData) {
+        if (![FFLaunchServicesStore isDataContainerPath:canonical]) return NO;
+    }
+    struct stat info;
+    if (lstat(canonical.fileSystemRepresentation, &info) == 0) {
+        return (info.st_mode & S_IFMT) == S_IFDIR;
+    }
+    return YES;  // shape-valid; access comes from the sandbox grant
+}
+
 - (BOOL)pathIsDirectory:(NSString *)path {
     if (path.length == 0) return NO;
     struct stat info;
     if (lstat(path.fileSystemRepresentation, &info) != 0) return NO;
-    if ((info.st_mode & S_IFMT) != S_IFDIR) return NO;
-    int descriptor = open(path.fileSystemRepresentation, O_RDONLY | O_DIRECTORY | O_CLOEXEC);
-    if (descriptor < 0) return NO;
-    close(descriptor);
-    return YES;
+    return (info.st_mode & S_IFMT) == S_IFDIR;
 }
 
-#pragma mark - 1. worse_query index
+#pragma mark - 1. LaunchServices store
 
-- (NSString *)lookupViaWorseQueryIndex:(NSString *)bundleID
-                                  kind:(FFContainerKind)kind
-                            attemptLog:(NSMutableArray<NSString *> *)attempts {
-    if (FFSandboxCurrentBackend() != FFSandboxBackendWorseQuery) {
-        [attempts addObject:@"worse_query index: backend inativo"];
+- (NSString *)lookupViaLaunchServices:(NSString *)bundleID
+                           attemptLog:(NSMutableArray<NSString *> *)attempts {
+    FFLaunchServicesSnapshot *snapshot = [FFLaunchServicesStore snapshot];
+    if (snapshot == nil) {
+        [attempts addObject:@"LaunchServices: store indisponível"];
         return nil;
     }
-    NSDictionary<NSString *, NSString *> *map = worse_query_identifier_paths();
-    NSString *path = map[bundleID];
+    NSString *path = [snapshot containerPathForBundleID:bundleID];
     if (path.length == 0) {
-        [attempts addObject:@"worse_query index: sem entrada"];
+        [attempts addObject:[NSString stringWithFormat:
+            @"LaunchServices: sem entrada (layout %@, %lu containers)",
+            snapshot.layoutLabel, (unsigned long)snapshot.mappedContainerCount]];
         return nil;
     }
-
-    // The index only carries data containers. For a bundle container we have to
-    // go from <uuid> to the .app inside /var/containers/Bundle/Application.
-    if (kind == FFContainerKindBundle) {
-        NSString *uuid = path.lastPathComponent;
-        NSString *bundleRoot = [FFBundleContainerRoot stringByAppendingPathComponent:uuid];
-        NSString *app = [self firstAppBundleInDirectory:bundleRoot bundleID:bundleID];
-        if (app.length) return app;
-        [attempts addObject:@"worse_query index: sem bundle container correspondente"];
+    NSString *canonical = [FFLaunchServicesStore canonicalContainerPath:path];
+    if (![FFLaunchServicesStore isDataContainerPath:canonical]) {
+        [attempts addObject:@"LaunchServices: caminho fora do container de dados"];
         return nil;
     }
-
-    if ([self pathIsDirectory:path]) return path;
-    [attempts addObject:@"worse_query index: caminho não abre"];
-    return nil;
+    return canonical;
 }
 
 #pragma mark - 2. MCM
@@ -176,7 +195,7 @@ static NSString *const FFMCMetadataFileName  = @".com.apple.mobile_container_man
     NSString *lookupError = nil;
     if (kind == FFContainerKindData) {
         NSString *path = MCMActivateContainerPath(2, bundleID, NO, &lookupError);
-        if (path.length && [self pathIsDirectory:path]) return path;
+        if (path.length && [self isUsableContainerPath:path kind:FFContainerKindData]) return path;
         [attempts addObject:[NSString stringWithFormat:@"MCM data: %@", lookupError ?: @"sem caminho"]];
         return nil;
     }
@@ -192,20 +211,71 @@ static NSString *const FFMCMetadataFileName  = @".com.apple.mobile_container_man
     return nil;
 }
 
-#pragma mark - 3. metadata plist scan
+#pragma mark - 3. worse_query index
+
+- (NSString *)lookupViaWorseQueryIndex:(NSString *)bundleID
+                                  kind:(FFContainerKind)kind
+                            attemptLog:(NSMutableArray<NSString *> *)attempts {
+    if (FFSandboxCurrentBackend() != FFSandboxBackendWorseQuery) {
+        [attempts addObject:@"worse_query index: backend inativo"];
+        return nil;
+    }
+
+    NSDictionary<NSString *, NSString *> *map = worse_query_identifier_paths();
+    NSString *path = map[bundleID];
+    if (path.length == 0) {
+        NSDictionary<NSString *, NSString *> *reverse = worse_query_path_identifiers();
+        for (NSString *candidate in reverse) {
+            if ([reverse[candidate] isEqualToString:bundleID]) { path = candidate; break; }
+        }
+    }
+    if (path.length == 0) {
+        [attempts addObject:@"worse_query index: sem entrada"];
+        return nil;
+    }
+
+    if (kind == FFContainerKindBundle) {
+        NSString *uuid = path.lastPathComponent;
+        NSString *bundleRoot = [FFBundleContainerRoot stringByAppendingPathComponent:uuid];
+        NSString *app = [self firstAppBundleInDirectory:bundleRoot bundleID:bundleID];
+        if (app.length) return app;
+        [attempts addObject:@"worse_query index: sem bundle container correspondente"];
+        return nil;
+    }
+
+    NSString *canonical = [FFLaunchServicesStore canonicalContainerPath:path];
+    if ([FFLaunchServicesStore isDataContainerPath:canonical]) return canonical;
+    [attempts addObject:@"worse_query index: caminho fora do container de dados"];
+    return nil;
+}
+
+#pragma mark - 4. metadata scan
 
 - (NSString *)lookupViaMetadataScan:(NSString *)bundleID
                                kind:(FFContainerKind)kind
                          attemptLog:(NSMutableArray<NSString *> *)attempts {
     NSString *root = (kind == FFContainerKindData) ? FFDataContainerRoot : FFBundleContainerRoot;
 
-    // The parent directory is owned by containermanagerd; ask for a grant so
-    // the enumeration itself is not denied.
-    int64_t handle = FFSandboxGrantPath(root, NO, NULL);
     NSArray<NSString *> *entries = [[NSFileManager defaultManager]
         contentsOfDirectoryAtPath:root error:NULL];
-    if (handle >= 0) FFSandboxReleaseHandle(handle);
-
+    if (entries.count == 0) {
+        // The app-data root is not itself grantable on worse_query (-6), so a
+        // grant round-trip there only costs a Caches swap. Try the plain
+        // listing once more after one grant attempt, then fall through to the
+        // inode walk below.
+        if (FFSandboxCurrentBackend() != FFSandboxBackendWorseQuery) {
+            int64_t handle = FFSandboxGrantPath(root, NO, NULL);
+            entries = [[NSFileManager defaultManager] contentsOfDirectoryAtPath:root error:NULL];
+            if (handle >= 0) FFSandboxReleaseHandle(handle);
+        }
+    }
+    if (entries.count == 0) {
+        entries = FFPathleakListNames(root, 2000000);
+        if (entries.count > 0) {
+            [attempts addObject:[NSString stringWithFormat:
+                @"metadata scan: %lu entrada(s) via pathleak", (unsigned long)entries.count]];
+        }
+    }
     if (entries.count == 0) {
         [attempts addObject:@"metadata scan: diretório ilegível"];
         return nil;
@@ -213,15 +283,16 @@ static NSString *const FFMCMetadataFileName  = @".com.apple.mobile_container_man
 
     NSArray<NSString *> *sorted = [entries sortedArrayUsingSelector:@selector(compare:)];
     for (NSString *entry in sorted) {
+        if ([[NSUUID alloc] initWithUUIDString:entry] == nil) continue;
         NSString *directory = [root stringByAppendingPathComponent:entry];
         NSString *metadataPath = [directory stringByAppendingPathComponent:FFMCMetadataFileName];
         NSDictionary *metadata = FFReadPlist(metadataPath);
         NSString *identifier = metadata[@"MCMMetadataIdentifier"];
-        if (identifier.length == 0) continue;
-        if (![identifier isEqualToString:bundleID]) continue;
+        if (identifier.length == 0 || ![identifier isEqualToString:bundleID]) continue;
 
         if (kind == FFContainerKindData) {
-            if ([self pathIsDirectory:directory]) return directory;
+            NSString *canonical = [FFLaunchServicesStore canonicalContainerPath:directory];
+            if ([FFLaunchServicesStore isDataContainerPath:canonical]) return canonical;
             continue;
         }
         NSString *app = [self firstAppBundleInDirectory:directory bundleID:bundleID];

@@ -227,3 +227,19 @@ que só fecha com Mac/aparelho.
 
 GPL-3.0. Componentes de terceiros mantêm suas licenças — [LICENSE](LICENSE),
 [NOTICE.md](NOTICE.md).
+
+
+## 11. Correções 2026-11-23 (backend / exploit)
+
+O resolvedor de container agora usa o banco do `lsd` (`FFLaunchServicesStore`)
+antes do MCM — é o único caminho que resolve `bundle id → container` em
+iOS 26.7+/27 quando o MCM recusa e o metadata plist é root-owned. Todos os grants
+do worse_query passam por um lock recursivo (o swap de `Library/Caches` não é
+reentrante; grants em paralelo eram a causa de instabilidade), a transação de
+patch mantém **um** token do container do backup até a escrita, e a cadeia de
+kernel ganhou crash guard (não repete sozinha depois de um reboot no meio).
+
+Detalhes, diagnóstico do log e como validar:
+[docs/CORRECAO-EXPLOIT-2026-11-23.md](docs/CORRECAO-EXPLOIT-2026-11-23.md)
+
+Perfil → **REATIVAR ACESSO** limpa o crash guard e roda a ativação de novo.

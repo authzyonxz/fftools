@@ -60,6 +60,11 @@ typedef NS_OPTIONS(NSUInteger, UIInterfaceOrientationMask) {
     UIInterfaceOrientationMaskPortrait = 1 << 1,
     UIInterfaceOrientationMaskLandscape = 1 << 4
 };
+typedef NS_OPTIONS(NSUInteger, UIViewAutoresizing) {
+    UIViewAutoresizingNone = 0,
+    UIViewAutoresizingFlexibleWidth = 1 << 1,
+    UIViewAutoresizingFlexibleHeight = 1 << 4
+};
 typedef NS_OPTIONS(NSUInteger, UIAccessibilityTraits) {
     UIAccessibilityTraitNone = 0,
     UIAccessibilityTraitButton = 1 << 0,
@@ -169,6 +174,8 @@ extern const NSInteger kCACornerCurveContinuous;
 @property BOOL translatesAutoresizingMaskIntoConstraints;
 @property (readonly) NSArray *subviews;
 @property (readonly) UIView *superview;
+@property (readonly) UIWindow *window;
+- (void)insertSubview:(UIView *)view atIndex:(NSInteger)index;
 @property BOOL hidden;
 @property CGFloat alpha;
 @property NSInteger tag;
@@ -185,6 +192,7 @@ extern const NSInteger kCACornerCurveContinuous;
 @property (readonly) NSLayoutAnchor *widthAnchor;
 @property (readonly) NSLayoutAnchor *heightAnchor;
 @property BOOL clipsToBounds;
+@property NSUInteger autoresizingMask;
 @property CGAffineTransform transform;
 @property BOOL isAccessibilityElement;
 @property (copy) NSString *accessibilityLabel;
@@ -342,6 +350,12 @@ extern const NSInteger kCACornerCurveContinuous;
 - (void)presentViewController:(UIViewController *)controller animated:(BOOL)animated completion:(void (^)(void))completion;
 - (void)dismissViewControllerAnimated:(BOOL)flag completion:(void (^)(void))completion;
 - (void)addChildViewController:(UIViewController *)controller;
+- (void)removeFromParentViewController;
+- (void)willMoveToParentViewController:(UIViewController *)parent;
+- (void)didMoveToParentViewController:(UIViewController *)parent;
+@property (readonly) UIView *viewIfLoaded;
+@property (readonly) BOOL isViewLoaded;
+@property (readonly) UIViewController *presentedViewController;
 - (UIStatusBarStyle)preferredStatusBarStyle;
 @property (readonly) UIInterfaceOrientationMask supportedInterfaceOrientations;
 @end
@@ -373,6 +387,7 @@ extern const NSInteger kCACornerCurveContinuous;
 
 @interface UIApplication : UIResponder
 + (UIApplication *)sharedApplication;
+@property (readonly) id delegate;
 @property (readonly) NSArray<UIScene *> *connectedScenes;
 @property (readonly) NSArray<UIWindow *> *windows;
 @property (readonly) UIWindow *keyWindow;

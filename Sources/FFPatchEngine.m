@@ -249,6 +249,16 @@ static NSRecursiveLock *FFPatchEngineOperationLock(void) {
     }
     NSString *fingerprint = [self fingerprintForContainerPath:container];
 
+    // Keep ONE sandbox token for the whole transaction (same rule as the 3106
+    // base: releasing it before the copy/restore revokes the access). This
+    // covers the backups (reads) and the writes, and on worse_query it saves a
+    // Caches swap per operation — the swap storm is what wedges the device.
+    int64_t containerGrant = FFSandboxGrantPath(container, YES, NULL);
+    if (containerGrant < 0 && FFSandboxCurrentBackend() != FFSandboxBackendKernel) {
+        FFLog(@"engine: grant do container recusado (%lld) — seguindo com grants por diretório", containerGrant);
+    }
+    @try {
+
     // ---- build rules -------------------------------------------------------
     NSMutableArray<FFRule *> *rules = [NSMutableArray array];
     NSMutableSet<NSString *> *targets = [NSMutableSet set];
@@ -540,6 +550,10 @@ static NSRecursiveLock *FFPatchEngineOperationLock(void) {
     FFLog(@"apply: %@ → %@ OK (%lu arquivos, container %@)",
           function.name, game.displayName, (unsigned long)rules.count, container);
     return YES;
+
+    } @finally {
+        if (containerGrant >= 0) FFSandboxReleaseHandle(containerGrant);
+    }
     } @finally {
         [operationLock unlock];
     }
@@ -764,6 +778,12 @@ static NSRecursiveLock *FFPatchEngineOperationLock(void) {
                                                                          error:error];
     if (container.length == 0) return NO;
 
+    int64_t containerGrant = FFSandboxGrantPath(container, YES, NULL);
+    if (containerGrant < 0 && FFSandboxCurrentBackend() != FFSandboxBackendKernel) {
+        FFLog(@"engine: grant do container recusado no restore (%lld)", containerGrant);
+    }
+    @try {
+
     NSString *fingerprint = [self fingerprintForContainerPath:container];
     NSString *expected = journal[FFJournalFingerprintKey];
     if (expected.length && ![expected isEqualToString:fingerprint]) {
@@ -902,6 +922,10 @@ static NSRecursiveLock *FFPatchEngineOperationLock(void) {
     FFLog(@"restore: %@ ← %@ OK (%lu arquivos)",
           function.name, game.displayName, (unsigned long)records.count);
     return YES;
+
+    } @finally {
+        if (containerGrant >= 0) FFSandboxReleaseHandle(containerGrant);
+    }
     } @finally {
         [operationLock unlock];
     }

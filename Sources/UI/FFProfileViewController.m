@@ -178,6 +178,18 @@
     [syncButton addTarget:self action:@selector(syncCatalogTapped) forControlEvents:UIControlEventTouchUpInside];
     [stack addArrangedSubview:syncButton];
 
+    UIButton *reactivateButton = [UIButton buttonWithType:UIButtonTypeSystem];
+    reactivateButton.translatesAutoresizingMaskIntoConstraints = NO;
+    [reactivateButton setTitle:@"REATIVAR ACESSO" forState:UIControlStateNormal];
+    reactivateButton.titleLabel.font = [UIFont systemFontOfSize:15 weight:UIFontWeightSemibold];
+    [reactivateButton setTitleColor:[FFTheme accent] forState:UIControlStateNormal];
+    reactivateButton.backgroundColor = [FFTheme card];
+    reactivateButton.layer.cornerRadius = 14;
+    reactivateButton.layer.cornerCurve = kCACornerCurveContinuous;
+    [reactivateButton.heightAnchor constraintEqualToConstant:48].active = YES;
+    [reactivateButton addTarget:self action:@selector(reactivateAccessTapped) forControlEvents:UIControlEventTouchUpInside];
+    [stack addArrangedSubview:reactivateButton];
+
     UIButton *restoreButton = [UIButton buttonWithType:UIButtonTypeSystem];
     restoreButton.translatesAutoresizingMaskIntoConstraints = NO;
     [restoreButton setTitle:@"RESTAURAR ORIGINAIS" forState:UIControlStateNormal];
@@ -245,6 +257,32 @@
 }
 
 #pragma mark - Actions
+
+- (void)reactivateAccessTapped {
+    FFSandboxClearKernelCrashGuard();
+    FFSandboxInvalidateCaches();
+    FFStatusAlertView *hud = [FFStatusAlertView showActivityWithTitle:@"REATIVANDO"
+                                                              detail:@"backend de sandbox"];
+    dispatch_async(dispatch_get_global_queue(QOS_CLASS_USER_INITIATED, 0), ^{
+        NSString *detail = nil;
+        BOOL ok = FFSandboxActivate(&detail);
+        dispatch_async(dispatch_get_main_queue(), ^{
+            [hud dismiss];
+            if (ok) {
+                [FFStatusAlertView showWithStyle:FFAlertStyleSuccess
+                                            title:@"STATUS"
+                                          message:@"ACESSO ATIVO"
+                                           detail:detail];
+            } else {
+                [FFStatusAlertView showWithStyle:FFAlertStyleFailure
+                                            title:@"STATUS"
+                                          message:FFUserMessageForError(FFMakeError(FFErrorNoSandboxAccess, @"%@", detail ?: @"")).uppercaseString
+                                           detail:detail];
+            }
+            [self rebuild];
+        });
+    });
+}
 
 - (void)syncCatalogTapped {
     FFStatusAlertView *hud = [FFStatusAlertView showActivityWithTitle:@"SINCRONIZANDO"

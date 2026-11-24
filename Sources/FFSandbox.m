@@ -116,10 +116,68 @@ NSString *FFSandboxUnsupportedReason(void) {
         FFOSVersionString(), FFOSBuildString()];
 }
 
+#pragma mark - Serialisation
+
+/*! Every worse_query entry point (grant, release, recover, reset, invalidate)
+    swaps the App Group's Library/Caches window. Those swaps are not reentrant
+    across the process, and overlapping them is the known way to wedge
+    containermanagerd (which surfaces as the app resigning or the device
+    respringing). One recursive lock owns all of it; it is recursive because the
+    probe calls the grant helper. */
+static NSRecursiveLock *FFSandboxOperationLock(void) {
+    static NSRecursiveLock *lock;
+    static dispatch_once_t onceToken;
+    dispatch_once(&onceToken, ^{
+        lock = [NSRecursiveLock new];
+    });
+    return lock;
+}
+
 #pragma mark - Grants
 
 NSString *FFSandboxAppGroup(void) {
     return worse_query_app_group();
+}
+
+static int64_t FFSandboxGrantPathLocked(NSString *clean, BOOL writable) {
+    const char *raw = clean.fileSystemRepresentation;
+    int64_t handle = -1;
+
+    switch (FFSandboxCurrentBackend()) {
+        case FFSandboxBackendKernel:
+            // No grant object: the kernel escape already removed the sandbox
+            // restriction. -1 means "not needed", not "failed".
+            return -1;
+        case FFSandboxBackendBadQuery:
+            return bad_query((char *)raw, true, NULL, false);
+        case FFSandboxBackendWorseQuery: {
+            handle = writable ? worse_query_grant_ex(raw, 1) : worse_query_grant(raw);
+
+            // Only -5 (unrepairable Caches state / query miss) is retried, and
+            // at most once per minute: a failed grant is never cached, so every
+            // retry costs a full Begin+Recover swap. -6/-7/-8 mean "this path
+            // cannot be minted / does not cover the target" — retrying them
+            // only multiplies swaps and forget_all revokes other threads' tokens.
+            if (handle == -5) {
+                // Called under FFSandboxOperationLock, so this flag needs no lock.
+                static NSDate *lastRepair;
+                static BOOL repairedOnce;
+                NSTimeInterval since = (lastRepair == nil) ? 1.0e18
+                    : [[NSDate date] timeIntervalSinceDate:lastRepair];
+                if (!repairedOnce || since >= 60.0) {
+                    repairedOnce = YES;
+                    lastRepair = [NSDate date];
+                    FFLog(@"sandbox: -5 em %@ — reparando Caches (throttle 60s)", clean.lastPathComponent);
+                    if (worse_query_reset_access_cache() || worse_query_recover()) {
+                        handle = writable ? worse_query_grant_ex(raw, 1) : worse_query_grant(raw);
+                    }
+                }
+            }
+            return handle;
+        }
+        default:
+            return -1;
+    }
 }
 
 int64_t FFSandboxGrantPath(NSString *path, BOOL writable, int *errorCode) {
@@ -131,32 +189,14 @@ int64_t FFSandboxGrantPath(NSString *path, BOOL writable, int *errorCode) {
     while (clean.length > 1 && [clean hasSuffix:@"/"]) {
         clean = [clean substringToIndex:clean.length - 1];
     }
-    const char *raw = clean.fileSystemRepresentation;
-    int64_t handle = -1;
 
-    switch (FFSandboxCurrentBackend()) {
-        case FFSandboxBackendKernel:
-            // No grant object: the kernel escape already removed the sandbox
-            // restriction. -1 means "not needed", not "failed".
-            handle = -1;
-            break;
-        case FFSandboxBackendBadQuery:
-            handle = bad_query((char *)raw, true, NULL, false);
-            break;
-        case FFSandboxBackendWorseQuery: {
-            handle = writable ? worse_query_grant_ex(raw, 1) : worse_query_grant(raw);
-            if (handle == -5) {
-                // App Group Library/Caches in a state the swap cannot start
-                // from. Repair once and ask again.
-                if (worse_query_reset_access_cache()) {
-                    handle = writable ? worse_query_grant_ex(raw, 1) : worse_query_grant(raw);
-                }
-            }
-            break;
-        }
-        default:
-            handle = -1;
-            break;
+    NSRecursiveLock *operationLock = FFSandboxOperationLock();
+    [operationLock lock];
+    int64_t handle = -1;
+    @try {
+        handle = FFSandboxGrantPathLocked(clean, writable);
+    } @finally {
+        [operationLock unlock];
     }
 
     if (errorCode) *errorCode = (int)handle;
@@ -169,15 +209,21 @@ int64_t FFSandboxGrantPath(NSString *path, BOOL writable, int *errorCode) {
 
 void FFSandboxReleaseHandle(int64_t handle) {
     if (handle < 0) return;
-    switch (FFSandboxCurrentBackend()) {
-        case FFSandboxBackendBadQuery:
-            bad_query_release(handle);
-            break;
-        case FFSandboxBackendWorseQuery:
-            worse_query_release(handle);
-            break;
-        default:
-            break;
+    NSRecursiveLock *operationLock = FFSandboxOperationLock();
+    [operationLock lock];
+    @try {
+        switch (FFSandboxCurrentBackend()) {
+            case FFSandboxBackendBadQuery:
+                bad_query_release(handle);
+                break;
+            case FFSandboxBackendWorseQuery:
+                worse_query_release(handle);
+                break;
+            default:
+                break;
+        }
+    } @finally {
+        [operationLock unlock];
     }
 }
 
@@ -218,12 +264,10 @@ static BOOL FFSandboxProbeUncached(void) {
             } else {
                 groupPath = [@"/var/mobile/Containers/Shared/AppGroup" stringByAppendingPathComponent:group];
             }
+            // Only the App Group is probed: it is the one path worse_query can
+            // always grant, and granting /var/mobile/Containers/Data here just
+            // burns a swap and fails with -6 on iOS 27.
             int64_t handle = FFSandboxGrantPath(groupPath, YES, NULL);
-            if (handle >= 0) {
-                FFSandboxReleaseHandle(handle);
-                return YES;
-            }
-            handle = FFSandboxGrantPath(@"/var/mobile/Containers/Data", YES, NULL);
             if (handle >= 0) {
                 FFSandboxReleaseHandle(handle);
                 return YES;
@@ -253,25 +297,35 @@ static NSLock *FFSandboxActivationLock(void) {
 BOOL FFSandboxAccessActive(void) {
     [FFProbeLock() lock];
     if (FFProbeCachedValid && FFProbeCachedAt != nil &&
-        [[NSDate date] timeIntervalSinceDate:FFProbeCachedAt] < 30.0) {
+        [[NSDate date] timeIntervalSinceDate:FFProbeCachedAt] < 60.0) {
         BOOL cached = FFProbeCachedValue;
         [FFProbeLock() unlock];
         return cached;
     }
     [FFProbeLock() unlock];
 
-    NSLock *activationLock = FFSandboxActivationLock();
-    [activationLock lock];
-    BOOL value = FFSandboxProbeUncached();
+    NSRecursiveLock *operationLock = FFSandboxOperationLock();
+    [operationLock lock];
+    BOOL value = NO;
+    @try {
+        // Re-check inside the lock: two callers may have raced past the cache.
+        [FFProbeLock() lock];
+        BOOL stillCached = FFProbeCachedValid && FFProbeCachedAt != nil;
+        if (stillCached) value = FFProbeCachedValue;
+        [FFProbeLock() unlock];
 
-    [FFProbeLock() lock];
-    FFProbeCachedValue = value;
-    FFProbeCachedAt = [NSDate date];
-    FFProbeCachedValid = YES;
-    [FFProbeLock() unlock];
-    [activationLock unlock];
-
-    FFLog(@"sandbox: probe %@ (%@)", value ? @"OK" : @"FAILED", FFSandboxBackendNameCurrent());
+        if (!stillCached) {
+            value = FFSandboxProbeUncached();
+            [FFProbeLock() lock];
+            FFProbeCachedValue = value;
+            FFProbeCachedAt = [NSDate date];
+            FFProbeCachedValid = YES;
+            [FFProbeLock() unlock];
+            FFLog(@"sandbox: probe %@ (%@)", value ? @"OK" : @"FAILED", FFSandboxBackendNameCurrent());
+        }
+    } @finally {
+        [operationLock unlock];
+    }
     return value;
 }
 
@@ -279,6 +333,11 @@ void FFSandboxWaitForActivation(void) {
     NSLock *activationLock = FFSandboxActivationLock();
     [activationLock lock];
     [activationLock unlock];
+    // Also wait for any in-flight grant/repair so a restore never runs
+    // container I/O while the Caches window is swapped.
+    NSRecursiveLock *operationLock = FFSandboxOperationLock();
+    [operationLock lock];
+    [operationLock unlock];
 }
 
 BOOL FFSandboxInvalidateCaches(void) {
@@ -286,9 +345,16 @@ BOOL FFSandboxInvalidateCaches(void) {
     FFProbeCachedValid = NO;
     FFProbeCachedAt = nil;
     [FFProbeLock() unlock];
-    if (FFSandboxCurrentBackend() == FFSandboxBackendWorseQuery) {
-        worse_query_forget_all();
-        worse_query_invalidate_caches();
+
+    NSRecursiveLock *operationLock = FFSandboxOperationLock();
+    [operationLock lock];
+    @try {
+        if (FFSandboxCurrentBackend() == FFSandboxBackendWorseQuery) {
+            worse_query_forget_all();
+            worse_query_invalidate_caches();
+        }
+    } @finally {
+        [operationLock unlock];
     }
     return YES;
 }
@@ -313,6 +379,17 @@ static BOOL FFSandboxActivateLocked(NSString **detailOut) {
             FFLog(@"kexploit: repetição bloqueada nesta sessão");
             return NO;
         }
+        // Crash guard: a kernel chain that panics the device leaves the app
+        // dead before it can clear this flag. On the next launch the automatic
+        // attempt is skipped once, so a bad build cannot turn into a boot loop.
+        NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
+        if ([defaults boolForKey:@"FFKernelChainRunning"]) {
+            FFLog(@"kexploit: tentativa anterior interrompeu o app — cadeia automática bloqueada "
+                  @"(Perfil → REATIVAR ACESSO para liberar)");
+            if (detailOut) *detailOut = @"tentativa anterior de kernel interrompeu o app; "
+                                        @"use REATIVAR ACESSO no Perfil";
+            return NO;
+        }
 
         // Jailbroken devices patch the sandbox themselves: the chain result is
         // not attributable to us, so do not claim a state we cannot stand behind.
@@ -329,7 +406,11 @@ static BOOL FFSandboxActivateLocked(NSString **detailOut) {
 
         FFLog(@"kexploit: ===== STAGE 1/2: kernel r/w (kexploit_opa334) =====");
         FFKernelActivationAttempted = YES;
+        [defaults setBool:YES forKey:@"FFKernelChainRunning"];
+        [defaults synchronize];
         int kernelResult = kexploit_opa334();
+        [defaults setBool:NO forKey:@"FFKernelChainRunning"];
+        [defaults synchronize];
         if (kernelResult != 0) {
             if (detailOut) *detailOut = [NSString stringWithFormat:
                 @"kernel exploit falhou (retorno %d). Build não suportada, offsets errados ou race perdida.",
@@ -356,6 +437,8 @@ static BOOL FFSandboxActivateLocked(NSString **detailOut) {
                 @"sandbox escape falhou (retorno %d).", escapeResult];
             return NO;
         }
+        [defaults setBool:NO forKey:@"FFKernelChainRunning"];
+        [defaults synchronize];
         FFSandboxInvalidateCaches();
         if (detailOut) *detailOut = active ? @"kernel + sandbox escape ativos"
                                            : @"kernel r/w ativo (limitado)";
@@ -368,16 +451,36 @@ static BOOL FFSandboxActivateLocked(NSString **detailOut) {
                                         @"ou com um App ID explícito com a capability App Groups.";
             return NO;
         }
+        // Heal an interrupted Caches swap before the first grant; a failed
+        // recovery is repaired once with the hard reset, because every later
+        // grant would fail with -5 otherwise.
         if (!worse_query_recover()) {
-            FFLog(@"exploit: recover de Caches pediu atenção (seguindo)");
+            FFLog(@"exploit: recover de Caches falhou — resetando access cache");
+            worse_query_reset_access_cache();
+            if (!worse_query_recover()) {
+                FFLog(@"exploit: Caches continua inconsistente após reset");
+            }
         }
     }
 
     BOOL ok = FFSandboxProbeUncached();
+    if (!ok && backend == FFSandboxBackendWorseQuery) {
+        FFLog(@"exploit: probe recusou — resetando access cache e tentando uma vez");
+        worse_query_reset_access_cache();
+        worse_query_forget_all();
+        ok = FFSandboxProbeUncached();
+    }
     if (detailOut) *detailOut = ok ? [NSString stringWithFormat:@"%@ ativo", FFSandboxBackendName(backend)]
                                    : [NSString stringWithFormat:@"%@ recusou o probe", FFSandboxBackendName(backend)];
     if (ok) FFSandboxInvalidateCaches();
     return ok;
+}
+
+void FFSandboxClearKernelCrashGuard(void) {
+    NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
+    [defaults setBool:NO forKey:@"FFKernelChainRunning"];
+    [defaults synchronize];
+    FFLog(@"kexploit: crash guard liberado manualmente");
 }
 
 BOOL FFSandboxActivate(NSString **detailOut) {
@@ -385,7 +488,13 @@ BOOL FFSandboxActivate(NSString **detailOut) {
     [activationLock lock];
     BOOL ok = NO;
     @try {
-        ok = FFSandboxActivateLocked(detailOut);
+        NSRecursiveLock *operationLock = FFSandboxOperationLock();
+        [operationLock lock];
+        @try {
+            ok = FFSandboxActivateLocked(detailOut);
+        } @finally {
+            [operationLock unlock];
+        }
     } @finally {
         [activationLock unlock];
     }
@@ -398,6 +507,9 @@ BOOL FFSandboxPerformWithGrant(NSString *directory,
                                BOOL writable,
                                NSError *(^body)(void),
                                NSError **error) {
+    NSRecursiveLock *operationLock = FFSandboxOperationLock();
+    [operationLock lock];
+    @try {
     int grantCode = 0;
     int64_t handle = FFSandboxGrantPath(directory, writable, &grantCode);
     BOOL granted = handle >= 0 || FFSandboxCurrentBackend() == FFSandboxBackendKernel;
@@ -440,4 +552,8 @@ BOOL FFSandboxPerformWithGrant(NSString *directory,
     if (retryError == nil) return YES;
     if (error) *error = retryError;
     return NO;
+
+    } @finally {
+        [operationLock unlock];
+    }
 }

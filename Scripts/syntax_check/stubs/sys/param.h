@@ -1,0 +1,4 @@
+#ifndef FF_VERIFY_SYS_PARAM_H
+#define FF_VERIFY_SYS_PARAM_H
+#define PATH_MAX 1024
+#endif

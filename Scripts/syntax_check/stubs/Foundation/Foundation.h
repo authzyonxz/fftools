@@ -15,6 +15,10 @@
 #include <string.h>
 
 typedef signed char BOOL;
+typedef unsigned short unichar;
+@class NSString;
+typedef NSString *NSNotificationName;
+#define NSNotFound ((NSInteger)0x7fffffffffffffffLL)
 #define YES ((BOOL)1)
 #define NO  ((BOOL)0)
 #define nil ((id)0)
@@ -103,6 +107,7 @@ typedef double NSTimeInterval;
 + (instancetype)stringWithContentsOfFile:(NSString *)path encoding:(NSUInteger)encoding error:(NSError **)error;
 - (instancetype)initWithFormat:(NSString *)format, ...;
 - (instancetype)initWithData:(NSData *)data encoding:(NSUInteger)encoding;
+- (instancetype)initWithBytes:(const void *)bytes length:(NSUInteger)length encoding:(NSUInteger)encoding;
 - (instancetype)initWithFormat:(NSString *)format arguments:(va_list)args;
 - (instancetype)initWithString:(NSString *)other;
 - (instancetype)initWithUTF8String:(const char *)cString;
@@ -111,6 +116,9 @@ typedef double NSTimeInterval;
 - (BOOL)containsString:(NSString *)needle;
 - (BOOL)isEqualToString:(NSString *)other;
 - (NSArray *)componentsSeparatedByString:(NSString *)separator;
+- (NSString *)stringByTrimmingCharactersInSet:(NSCharacterSet *)set;
+- (struct _NSRange)rangeOfCharacterFromSet:(NSCharacterSet *)set;
+- (unichar)characterAtIndex:(NSUInteger)index;
 - (NSString *)stringByAppendingString:(NSString *)other;
 - (NSString *)stringByAppendingFormat:(NSString *)format, ...;
 - (NSString *)stringByAppendingPathComponent:(NSString *)component;
@@ -146,8 +154,10 @@ NSRange NSMakeRange(NSUInteger location, NSUInteger length);
 @property (readonly) NSUInteger unsignedIntegerValue;
 + (NSNumber *)numberWithInteger:(NSInteger)value;
 + (NSNumber *)numberWithDouble:(double)value;
++ (NSNumber *)numberWithUnsignedInt:(unsigned int)value;
 + (NSNumber *)numberWithInteger:(NSInteger)value;
 + (NSNumber *)numberWithDouble:(double)value;
++ (NSNumber *)numberWithUnsignedInt:(unsigned int)value;
 + (NSNumber *)numberWithUnsignedLongLong:(unsigned long long)value;
 + (NSNumber *)numberWithLongLong:(long long)value;
 + (NSNumber *)numberWithInt:(int)value;
@@ -187,6 +197,7 @@ NSRange NSMakeRange(NSUInteger location, NSUInteger length);
 @property (readonly) NSTimeInterval timeIntervalSince1970;
 - (NSTimeInterval)timeIntervalSinceDate:(NSDate *)other;
 - (NSComparisonResult)compare:(NSDate *)other;
+- (BOOL)isEqualToDate:(NSDate *)other;
 @end
 @interface NSArray<__covariant ObjectType> : NSObject <NSFastEnumeration>
 @property (readonly) NSUInteger count;
@@ -290,6 +301,7 @@ NSString *NSTemporaryDirectory(void);
 @end
 
 @interface NSUUID : NSObject
+- (instancetype)initWithUUIDString:(NSString *)string;
 + (NSUUID *)UUID;
 @property (readonly, copy) NSString *UUIDString;
 @end
@@ -300,6 +312,7 @@ NSString *NSTemporaryDirectory(void);
 
 @interface NSCharacterSet : NSObject
 + (instancetype)characterSetWithCharactersInString:(NSString *)string;
++ (NSCharacterSet *)whitespaceAndNewlineCharacterSet;
 @property (readonly) NSCharacterSet *invertedSet;
 @end
 
@@ -339,6 +352,7 @@ extern NSString *const NSFileTypeSymbolicLink;
 extern NSString *const NSFilePosixPermissions;
 extern NSString *const NSFileProtectionKey;
 extern NSString *const NSFileModificationDate;
+extern NSString *const NSFileSize;
 
 @interface NSFileHandle : NSObject
 + (instancetype)fileHandleForReadingAtPath:(NSString *)path;
@@ -372,7 +386,12 @@ typedef struct { NSInteger majorVersion; NSInteger minorVersion; NSInteger patch
 + (instancetype)standardUserDefaults;
 - (NSString *)stringForKey:(NSString *)key;
 - (void)setObject:(id)value forKey:(NSString *)key;
+- (id)objectForKey:(NSString *)key;
+- (void)removeObjectForKey:(NSString *)key;
 - (NSInteger)integerForKey:(NSString *)key;
+- (BOOL)boolForKey:(NSString *)key;
+- (void)setBool:(BOOL)value forKey:(NSString *)key;
+- (void)synchronize;
 @end
 
 @interface NSDateFormatter : NSObject
@@ -393,6 +412,7 @@ typedef long NSInteger;
 @interface NSNotificationCenter : NSObject
 + (NSNotificationCenter *)defaultCenter;
 - (void)addObserver:(id)observer selector:(SEL)selector name:(NSString *)name object:(id)object;
+- (void)removeObserver:(id)observer;
 - (void)postNotificationName:(NSString *)name object:(id)object;
 @end
 
@@ -432,6 +452,12 @@ typedef NS_ENUM(NSInteger, NSURLRequestCachePolicy) {
 + (NSURLSession *)sharedSession;
 - (NSURLSessionDataTask *)dataTaskWithRequest:(NSURLRequest *)request
                             completionHandler:(void (^)(NSData *data, NSURLResponse *response, NSError *error))completionHandler;
+@end
+
+@interface NSRecursiveLock : NSObject
+- (void)lock;
+- (void)unlock;
+- (BOOL)tryLock;
 @end
 
 @interface NSLock : NSObject
@@ -478,6 +504,7 @@ extern void dispatch_after(dispatch_time_t when, dispatch_queue_t queue, dispatc
 typedef void *os_log_t;
 
 @interface NSThread : NSObject
++ (BOOL)isMainThread;
 + (void)sleepForTimeInterval:(NSTimeInterval)interval;
 @end
 

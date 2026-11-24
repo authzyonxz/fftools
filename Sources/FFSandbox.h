@@ -52,6 +52,9 @@ BOOL FFSandboxActivate(NSString **_Nullable detailOut);
 /*! Waits for any in-flight sandbox activation or uncached probe to finish. */
 void FFSandboxWaitForActivation(void);
 
+/*! Releases the "previous kernel attempt crashed" guard (Perfil → REATIVAR). */
+void FFSandboxClearKernelCrashGuard(void);
+
 /*! Drops the cached probe result and every cached worse_query token. */
 BOOL FFSandboxInvalidateCaches(void);
 
