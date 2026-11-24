@@ -71,9 +71,46 @@ static uint64_t FFPathleakCeiling(fsid_t id, uint64_t ceiling) {
     return refined;
 }
 
+#pragma mark - Cache
+
+/*! The inode walk is expensive and the probe + container resolution hit the
+    same roots repeatedly; results are memoised for two minutes. */
+static NSMutableDictionary<NSString *, NSDictionary *> *FFPathleakCache(void) {
+    static NSMutableDictionary<NSString *, NSDictionary *> *cache;
+    static dispatch_once_t onceToken;
+    dispatch_once(&onceToken, ^{
+        cache = [NSMutableDictionary dictionary];
+    });
+    return cache;
+}
+
+static NSArray<NSString *> *FFPathleakMemoLookup(NSString *directory) {
+    @synchronized (FFPathleakCache()) {
+        NSDictionary *entry = FFPathleakCache()[directory];
+        if (entry == nil) return nil;
+        NSDate *stamp = entry[@"at"];
+        if (stamp == nil || [[NSDate date] timeIntervalSinceDate:stamp] >= 120.0) {
+            [FFPathleakCache() removeObjectForKey:directory];
+            return nil;
+        }
+        return entry[@"paths"];
+    }
+}
+
+static void FFPathleakMemoStore(NSString *directory, NSArray<NSString *> *paths) {
+    @synchronized (FFPathleakCache()) {
+        FFPathleakCache()[directory] = @{@"at": [NSDate date], @"paths": paths ?: @[]};
+    }
+}
+
+#pragma mark - Public
+
 NSArray<NSString *> *FFPathleakListPaths(NSString *directory, NSUInteger maxInodes) {
     NSString *clean = FFPathleakNormalize(directory);
     if (clean.length == 0) return @[];
+
+    NSArray<NSString *> *memoised = FFPathleakMemoLookup(clean);
+    if (memoised != nil) return memoised;
 
     fsid_t filesystemID;
     if (!FFPathleakFileSystemID(clean, &filesystemID)) return @[];
@@ -86,10 +123,7 @@ NSArray<NSString *> *FFPathleakListPaths(NSString *directory, NSUInteger maxInod
     char buffer[PATH_MAX];
     for (uint64_t inode = 1; inode <= effectiveCeiling; inode++) {
         @autoreleasepool {
-            if (inode % 8192 == 0) {
-                // Cheap cancellation point for the caller's timeout logic.
-                if ([NSThread isMainThread]) break;
-            }
+            if (inode % 8192 == 0 && [NSThread isMainThread]) break;
             long length = fsgetpath(buffer, sizeof(buffer), &filesystemID, inode);
             if (length <= 0) continue;
             NSString *path = FFPathleakStripPrivate([NSString stringWithUTF8String:buffer]);
@@ -103,6 +137,7 @@ NSArray<NSString *> *FFPathleakListPaths(NSString *directory, NSUInteger maxInod
     }
     FFLog(@"pathleak: %@ → %lu entrada(s) (até inode %llu)",
           clean.lastPathComponent, (unsigned long)paths.count, effectiveCeiling);
+    FFPathleakMemoStore(clean, paths);
     return paths;
 }
 

@@ -68,7 +68,6 @@ static FFGame *FFNormalGame(FFManifest *manifest) {
 - (void)viewDidLoad {
     [super viewDidLoad];
     self.view.backgroundColor = [FFTheme background];
-    [FFTheme installBackgroundInView:self.view];
     self.title = @"Início";
 
     [self buildScrollView];
@@ -81,7 +80,6 @@ static FFGame *FFNormalGame(FFManifest *manifest) {
 
 - (void)viewWillAppear:(BOOL)animated {
     [super viewWillAppear:animated];
-    [FFTheme animateEntrance:self.view];
     [self reloadState];
 }
 

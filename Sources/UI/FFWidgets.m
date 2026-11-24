@@ -59,22 +59,18 @@
         _titleLabel.text = title;
         _titleLabel.font = [FFTheme rowTitleFont];
         _titleLabel.textColor = [FFTheme primaryText];
-        _titleLabel.numberOfLines = 0;
-        _titleLabel.adjustsFontForContentSizeCategory = YES;
+        _titleLabel.numberOfLines = 1;
 
         _subtitleLabel = [UILabel new];
         _subtitleLabel.translatesAutoresizingMaskIntoConstraints = NO;
         _subtitleLabel.text = subtitle;
         _subtitleLabel.font = [FFTheme rowSubtitleFont];
         _subtitleLabel.textColor = [FFTheme secondaryText];
-        _subtitleLabel.numberOfLines = 0;
-        _subtitleLabel.adjustsFontForContentSizeCategory = YES;
+        _subtitleLabel.numberOfLines = 2;
 
         _toggle = [UISwitch new];
         _toggle.translatesAutoresizingMaskIntoConstraints = NO;
-        _toggle.onTintColor = [FFTheme success];
-        _toggle.thumbTintColor = [UIColor colorWithWhite:0.35 alpha:1];
-        _toggle.accessibilityLabel = title;   // ligado = verde, preenchido
+        _toggle.onTintColor = [FFTheme success];   // ligado = verde, preenchido
         [_toggle addTarget:self
                     action:@selector(toggleChanged:)
           forControlEvents:UIControlEventValueChanged];
@@ -91,7 +87,6 @@
         [NSLayoutConstraint activateConstraints:@[
             [_titleLabel.topAnchor constraintEqualToAnchor:self.topAnchor constant:12],
             [_titleLabel.leadingAnchor constraintEqualToAnchor:self.leadingAnchor constant:16],
-            [_titleLabel.trailingAnchor constraintLessThanOrEqualToAnchor:_toggle.leadingAnchor constant:-12],
 
             [_subtitleLabel.topAnchor constraintEqualToAnchor:_titleLabel.bottomAnchor constant:2],
             [_subtitleLabel.leadingAnchor constraintEqualToAnchor:_titleLabel.leadingAnchor],
@@ -146,9 +141,7 @@
     if (self) {
         self.translatesAutoresizingMaskIntoConstraints = NO;
         self.backgroundColor = [FFTheme card];
-        self.layer.borderWidth = 0.75;
-        self.layer.borderColor = [FFTheme separator].CGColor;
-        self.layer.cornerRadius = 18;
+        self.layer.cornerRadius = 14;
         self.layer.cornerCurve = kCACornerCurveContinuous;
         self.clipsToBounds = YES;
 
@@ -196,9 +189,7 @@
         _game = game;
         self.translatesAutoresizingMaskIntoConstraints = NO;
         self.backgroundColor = [FFTheme card];
-        self.layer.borderWidth = 0.75;
-        self.layer.borderColor = [FFTheme separator].CGColor;
-        self.layer.cornerRadius = 18;
+        self.layer.cornerRadius = 16;
         self.layer.cornerCurve = kCACornerCurveContinuous;
 
         _iconView = [UIImageView new];
@@ -226,15 +217,15 @@
         [NSLayoutConstraint activateConstraints:@[
             [_iconView.topAnchor constraintEqualToAnchor:self.topAnchor constant:14],
             [_iconView.centerXAnchor constraintEqualToAnchor:self.centerXAnchor],
-            [_iconView.widthAnchor constraintEqualToConstant:48],
-            [_iconView.heightAnchor constraintEqualToConstant:48],
+            [_iconView.widthAnchor constraintEqualToConstant:64],
+            [_iconView.heightAnchor constraintEqualToConstant:64],
 
             [_nameLabel.topAnchor constraintEqualToAnchor:_iconView.bottomAnchor constant:10],
             [_nameLabel.leadingAnchor constraintEqualToAnchor:self.leadingAnchor constant:8],
             [_nameLabel.trailingAnchor constraintEqualToAnchor:self.trailingAnchor constant:-8],
             [_nameLabel.bottomAnchor constraintLessThanOrEqualToAnchor:self.bottomAnchor constant:-12],
 
-            [self.heightAnchor constraintGreaterThanOrEqualToConstant:102],
+            [self.heightAnchor constraintGreaterThanOrEqualToConstant:118],
         ]];
 
         self.accessibilityTraits = UIAccessibilityTraitButton;
@@ -245,14 +236,14 @@
 
 - (void)setActive:(BOOL)active {
     _selectedGame = active;
-    self.layer.borderWidth = active ? 1.5 : 0.75;
-    self.layer.borderColor = active ? [UIColor whiteColor].CGColor : [FFTheme separator].CGColor;
+    self.layer.borderWidth = active ? 2.0 : 0.0;
+    self.layer.borderColor = active ? [UIColor whiteColor].CGColor : [UIColor clearColor].CGColor;
     self.accessibilityValue = active ? @"selecionado" : nil;
 }
 
 - (void)setHighlighted:(BOOL)highlighted {
     [super setHighlighted:highlighted];
-    [UIView animateWithDuration:UIAccessibilityIsReduceMotionEnabled() ? 0 : 0.18 animations:^{
+    [UIView animateWithDuration:0.12 animations:^{
         self.alpha = highlighted ? 0.75 : 1.0;
     }];
 }

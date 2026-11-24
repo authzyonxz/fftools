@@ -84,7 +84,6 @@
 - (void)viewDidLoad {
     [super viewDidLoad];
     self.view.backgroundColor = [FFTheme background];
-    [FFTheme installBackgroundInView:self.view];
     self.title = @"Perfil";
     [[NSNotificationCenter defaultCenter] addObserver:self
                                              selector:@selector(licenseDidUpdate:)
@@ -95,7 +94,6 @@
 
 - (void)viewWillAppear:(BOOL)animated {
     [super viewWillAppear:animated];
-    [FFTheme animateEntrance:self.view];
     [self rebuild];
 }
 
@@ -123,7 +121,7 @@
     UIStackView *stack = [UIStackView new];
     stack.translatesAutoresizingMaskIntoConstraints = NO;
     stack.axis = UILayoutConstraintAxisVertical;
-    stack.spacing = 16;
+    stack.spacing = 22;
     [scroll addSubview:stack];
     [_builtViews addObject:stack];
 

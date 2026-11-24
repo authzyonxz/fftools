@@ -239,13 +239,9 @@ static NSArray<NSString *> *FFLSListDirectory(NSString *directory) {
 
     // Never grant here: the roots walked below are parent directories, and a
     // grant on a non-container path returns -6/-4 while still costing a swap.
-    // The inode walk is only worth it on the worse_query backends, where the
-    // parent listing is the only source left; 26.x resolves through bad_query
-    // metadata instead, so do not burn the 2M-inode sweep there.
-    if (FFSandboxCurrentBackend() == FFSandboxBackendWorseQuery) {
-        return FFPathleakListNames(directory, 2000000);
-    }
-    return @[];
+    // fsgetpath itself needs no token, so the inode walk works on every
+    // backend where the plain listing is denied (26.x bad_query included).
+    return FFPathleakListNames(directory, 2000000);
 }
 
 static NSData *FFLSReadFile(NSString *path) {
