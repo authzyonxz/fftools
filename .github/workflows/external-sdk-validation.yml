@@ -1,0 +1,14 @@
+name: external-sdk-validation
+on:
+  push:
+    branches: [codex/external-sdk]
+permissions:
+  contents: read
+jobs:
+  validate:
+    runs-on: macos-15-intel
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Compile iOS SDK and test AES interop
+        run: bash SDK/KeyAuthExternal/tests/validate-ios.sh

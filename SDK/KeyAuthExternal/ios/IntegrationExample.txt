@@ -1,0 +1,43 @@
+// Objective-C, inside your app/scene setup, on the main thread:
+#import "KALicenseViewController.h"
+
+KAProtectedRootController *gate = [[KAProtectedRootController alloc]
+    initWithContentFactory:^UIViewController *(KAExternalClient *client, NSDictionary *license) {
+        // Only called AFTER signature verification and server introspection succeed.
+        // Instantiate your real tabs/controllers HERE. Never pre-create protected screens.
+        YourMainViewController *main = [YourMainViewController new];
+        main.licenseClient = client; // Retain for checks before sensitive operations.
+        return main;
+    }];
+self.window.rootViewController = gate;
+[self.window makeKeyAndVisible];
+
+// Before each protected operation:
+[self.licenseClient revalidate:^(NSDictionary *license, NSError *error) {
+    if (error) return; // The gate returns to login. Do not execute the operation.
+    // Execute authorized work. Protected network resources must also validate on the server.
+}];
+
+// Objective-C++ (.mm) calling a C++ feature AFTER online authorization:
+[self.licenseClient revalidate:^(NSDictionary *license, NSError *error) {
+    if (error) return;
+    MyCppFeature::run();
+}];
+
+Important: a local operation can still be patched on a compromised device.
+The server must check the grant on every protected resource/action. Do not rely
+on a boolean, a hook detector, or this callback as an unbreakable security boundary.
+
+Integration into fftools:
+- Keep a SINGLE licensing coordinator. This is an alternative to the Logos flow,
+  not a second simultaneous login. Do not change the vendor library to insert it.
+- Put creation of the app tabs/catalog behind the content factory.
+- Existing FFLicense.apiValidated is not sufficient as an authorization boundary.
+- Do not export a setter that changes a local "authorized" flag.
+- /3106 is currently public and does not validate this grant. Its server requires
+  a separate authorization change before downloads there can be license protected.
+- Existing keys bound to a different installation-ID algorithm need one authorized
+  HWID reset before the new Secure Enclave identity can use them.
+- Keep Bundle ID, signing team, and Keychain access entitlements stable.
+- Do not copy the admin wqd_ token, the Logos token, MASTER_SECRET or private
+  signing key into this SDK. No such secret is needed for the EXTERNAL v2 flow.
