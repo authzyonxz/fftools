@@ -5,7 +5,7 @@
 #import <objc/runtime.h>
 #import <CommonCrypto/CommonDigest.h>
 #import <mach/mach.h>
-#import <mach/mach_vm.h>
+#import <mach/vm_map.h>
 #import <dlfcn.h>
 
 typedef struct { SEL selector; IMP implementation; unsigned char digest[CC_SHA256_DIGEST_LENGTH]; } KAGuard;
@@ -14,9 +14,9 @@ static unsigned char cryptoDigest[CC_SHA256_DIGEST_LENGTH], policyDigest[CC_SHA2
 static BOOL initialized;
 static void *ownImage;
 static BOOL KADigest(const void *address, unsigned char *digest) {
-    unsigned char bytes[64]; mach_vm_size_t count = 0;
-    if (mach_vm_read_overwrite(mach_task_self(), (mach_vm_address_t)address, sizeof(bytes),
-        (mach_vm_address_t)bytes, &count) != KERN_SUCCESS || count != sizeof(bytes)) return NO;
+    unsigned char bytes[64]; vm_size_t count = 0;
+    if (vm_read_overwrite(mach_task_self(), (vm_address_t)address, sizeof(bytes),
+        (vm_address_t)bytes, &count) != KERN_SUCCESS || count != sizeof(bytes)) return NO;
     CC_SHA256(bytes,sizeof(bytes),digest); return YES;
 }
 static BOOL KASame(const void *address, const unsigned char *expected) {
