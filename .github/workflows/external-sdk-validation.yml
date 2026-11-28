@@ -7,8 +7,15 @@ permissions:
 jobs:
   validate:
     runs-on: macos-15-intel
-    timeout-minutes: 10
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
-      - name: Compile iOS SDK and test AES interop
+      - name: Compile iOS SDK and test cryptography
         run: bash SDK/KeyAuthExternal/tests/validate-ios.sh
+      - name: Render UIKit login on iPhone simulator
+        run: bash SDK/KeyAuthExternal/tests/preview-ios.sh
+      - uses: actions/upload-artifact@v4
+        with:
+          name: external-login-preview
+          path: SDK/KeyAuthExternal/.validation/login-iphone-se.png
+          retention-days: 7
