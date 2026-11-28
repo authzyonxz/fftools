@@ -10,4 +10,7 @@ xcrun clang++ -isysroot "$SDK" -target arm64-apple-ios15.0 -std=c++17 -fobjc-arc
 OPENSSL=$(brew --prefix openssl@3)
 c++ -std=c++17 -Wall -Wextra -Werror -I"$OPENSSL/include" -Icpp cpp/Transport.cpp tests/transport_cli.cpp -L"$OPENSSL/lib" -lcrypto -o .validation/transport_cli
 node tests/interoperability.cjs "$PWD/.validation/transport_cli"
+node tests/create-grant-fixtures.cjs
+xcrun clang -fobjc-arc -fmodules -Iios -framework Foundation -framework Security .validation/KASecurity-test.m tests/grant_tests.m -o .validation/grant_tests
+.validation/grant_tests
 echo 'iOS arm64 compilation and AES interoperability passed.'
