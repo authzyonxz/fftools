@@ -22,3 +22,6 @@ Thumbs.db
 
 # Official release archive is fetched and hash-verified before building.
 Sources/Vendor/LogosAPI/libAPIClient.a
+
+.auth-vm-toolchain/
+.auth-vm-objects/

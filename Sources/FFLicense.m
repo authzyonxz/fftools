@@ -101,13 +101,13 @@ NSNotificationName const FFLicenseDidUpdateNotification = @"FFLicenseDidUpdateNo
     __block NSError *failure = nil;
     __block BOOL valid = NO;
     dispatch_async(dispatch_get_main_queue(), ^{
-        [self.client revalidate:^(NSDictionary *license, NSError *apiError) {
+        [self.client authorizeOperation:^(NSDictionary *license, NSError *apiError) {
             failure = apiError;
             valid = license != nil && apiError == nil;
             dispatch_semaphore_signal(done);
         }];
     });
-    if (dispatch_semaphore_wait(done, dispatch_time(DISPATCH_TIME_NOW, 25 * NSEC_PER_SEC)) != 0) {
+    if (dispatch_semaphore_wait(done, dispatch_time(DISPATCH_TIME_NOW, 70 * NSEC_PER_SEC)) != 0) {
         if (error) *error = KAError(@"NETWORK");
         return NO;
     }

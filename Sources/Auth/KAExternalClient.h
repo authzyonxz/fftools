@@ -8,6 +8,7 @@ typedef void (^KACompletion)(NSDictionary * _Nullable license, NSError * _Nullab
 // Main-thread API. The server is the authority; never persist a local "licensed" flag.
 @interface KAExternalClient : NSObject
 - (void)loginWithLicense:(NSString *)license remember:(BOOL)remember completion:(KACompletion)completion;
+- (void)authorizeOperation:(KACompletion)completion;
 - (void)revalidate:(KACompletion)completion;
 - (void)invalidate;
 - (void)forgetLicense;

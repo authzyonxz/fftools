@@ -1,4 +1,5 @@
 #import "KALicenseViewController.h"
+#import "KASecurity.h"
 
 @interface KAOrbitCanvas : UIView @end
 @implementation KAOrbitCanvas
@@ -24,10 +25,13 @@
 @property(nonatomic) UILabel *status;
 @property(nonatomic) UIActivityIndicatorView *spinner;
 @property(nonatomic) BOOL busy;
+@property(nonatomic) BOOL autoAttempted;
+@property(nonatomic) BOOL allowAutoLogin;
+@property(nonatomic) NSError *lockError;
 @end
 @implementation KALicenseViewController
 - (instancetype)initWithClient:(KAExternalClient *)client onAuthorized:(void (^)(NSDictionary *))authorized {
-    if ((self = [super init])) { _client = client; _authorized = [authorized copy]; } return self;
+    if ((self = [super init])) { _client = client; _authorized = [authorized copy]; _allowAutoLogin = YES; } return self;
 }
 - (UILabel *)label:(NSString *)text size:(CGFloat)size weight:(UIFontWeight)weight color:(CGFloat)white {
     UILabel *label = [UILabel new]; label.text = text; label.numberOfLines = 0;
@@ -47,10 +51,11 @@
     card.layer.cornerRadius = 26; card.layer.cornerCurve = kCACornerCurveContinuous;
     card.layer.borderWidth = 1; card.layer.borderColor = [UIColor colorWithWhite:1 alpha:.14].CGColor;
     [scroll addSubview:card];
-    UILabel *brand = [self label:@"EXTERNAL / ACCESS" size:11 weight:UIFontWeightSemibold color:.65];
-    UILabel *title = [self label:@"Seu acesso.\nSeu dispositivo." size:32 weight:UIFontWeightBold color:1];
-    UILabel *subtitle = [self label:@"Insira sua key do EXTERNAL para entrar." size:15 weight:UIFontWeightRegular color:.65];
-    self.keyField = [UITextField new]; self.keyField.delegate = self; self.keyField.placeholder = @"KEY DO EXTERNAL";
+    UILabel *title = [self label:@"EXTERNAL" size:30 weight:UIFontWeightBold color:1];
+    NSDictionary *info = NSBundle.mainBundle.infoDictionary;
+    NSString *version = [NSString stringWithFormat:@"%@ · BUILD %@", info[@"CFBundleShortVersionString"] ?: @"—", info[@"CFBundleVersion"] ?: @"—"];
+    UILabel *subtitle = [self label:version size:12 weight:UIFontWeightMedium color:.6];
+    self.keyField = [UITextField new]; self.keyField.delegate = self; self.keyField.placeholder = @"Cole sua key";
     self.keyField.accessibilityLabel = @"Key do pacote EXTERNAL";
     self.keyField.secureTextEntry = YES; self.keyField.autocorrectionType = UITextAutocorrectionTypeNo;
     self.keyField.spellCheckingType = UITextSpellCheckingTypeNo; self.keyField.autocapitalizationType = UITextAutocapitalizationTypeAllCharacters;
@@ -67,7 +72,7 @@
     UIStackView *saveRow = [[UIStackView alloc] initWithArrangedSubviews:@[saveLabel,self.remember]];
     saveRow.axis = UILayoutConstraintAxisHorizontal; saveRow.alignment = UIStackViewAlignmentCenter; saveRow.spacing = 12;
     self.submit = [UIButton buttonWithType:UIButtonTypeSystem];
-    [self.submit setTitle:@"Entrar no EXTERNAL  →" forState:UIControlStateNormal];
+    [self.submit setTitle:@"Entrar" forState:UIControlStateNormal];
     [self.submit setTitleColor:UIColor.blackColor forState:UIControlStateNormal];
     self.submit.backgroundColor = UIColor.whiteColor; self.submit.layer.cornerRadius = 13;
     self.submit.titleLabel.font = [UIFont systemFontOfSize:16 weight:UIFontWeightSemibold];
@@ -75,9 +80,8 @@
     [self.submit addTarget:self action:@selector(login) forControlEvents:UIControlEventTouchUpInside];
     self.spinner = [[UIActivityIndicatorView alloc] initWithActivityIndicatorStyle:UIActivityIndicatorViewStyleMedium];
     self.spinner.hidesWhenStopped = YES;
-    self.status = [self label:@"Já salvou sua key? Deixe o campo vazio para usá-la." size:12 weight:UIFontWeightRegular color:.6];
-    UILabel *footer = [self label:@"EXCLUSIVO EXTERNAL · VALIDAÇÃO ONLINE\nAcesso liberado somente após confirmação da licença." size:10 weight:UIFontWeightMedium color:.45];
-    UIStackView *stack = [[UIStackView alloc] initWithArrangedSubviews:@[brand,title,subtitle,self.keyField,saveRow,self.submit,self.spinner,self.status,footer]];
+    self.status = [self label:self.lockError.localizedDescription ?: @"" size:12 weight:UIFontWeightRegular color:.6];
+    UIStackView *stack = [[UIStackView alloc] initWithArrangedSubviews:@[title,subtitle,self.keyField,saveRow,self.submit,self.spinner,self.status]];
     stack.axis = UILayoutConstraintAxisVertical; stack.spacing = 18; stack.translatesAutoresizingMaskIntoConstraints = NO;
     [stack setCustomSpacing:8 afterView:title]; [stack setCustomSpacing:26 afterView:subtitle]; [card addSubview:stack];
     NSLayoutConstraint *center = [card.centerYAnchor constraintEqualToAnchor:scroll.frameLayoutGuide.centerYAnchor]; center.priority = 750;
@@ -94,6 +98,21 @@
         [stack.topAnchor constraintEqualToAnchor:card.topAnchor constant:26], [stack.bottomAnchor constraintEqualToAnchor:card.bottomAnchor constant:-26],
         [stack.leadingAnchor constraintEqualToAnchor:card.leadingAnchor constant:24], [stack.trailingAnchor constraintEqualToAnchor:card.trailingAnchor constant:-24]
     ]];
+}
+- (void)viewDidAppear:(BOOL)animated {
+    [super viewDidAppear:animated];
+    [[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(resumeSaved) name:UIApplicationDidBecomeActiveNotification object:nil];
+    [self resumeSaved];
+}
+- (void)viewDidDisappear:(BOOL)animated {
+    [super viewDidDisappear:animated];
+    [[NSNotificationCenter defaultCenter] removeObserver:self];
+}
+- (void)resumeSaved {
+    if (!self.allowAutoLogin || self.autoAttempted || self.busy || UIApplication.sharedApplication.applicationState != UIApplicationStateActive) return;
+    self.autoAttempted = YES;
+    // Presence alone never grants access: login performs the full online proof.
+    if (KAReadLicense(NULL).length) [self login];
 }
 - (BOOL)textFieldShouldReturn:(UITextField *)textField { [self login]; return NO; }
 - (void)login {
@@ -126,9 +145,9 @@
 }
 - (void)viewDidLoad {
     [super viewDidLoad]; self.view.backgroundColor = UIColor.blackColor;
-    [[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(lock) name:KAExternalDidLockNotification object:self.client];
+    [[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(locked:) name:KAExternalDidLockNotification object:self.client];
     [[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(resign) name:UIApplicationWillResignActiveNotification object:nil];
-    [self lock];
+    [self showLogin:nil allowAutomatic:YES];
 }
 - (void)resign { [self.client invalidate]; }
 - (void)replace:(UIViewController *)next animated:(BOOL)animated {
@@ -140,7 +159,12 @@
         next.view.alpha = 0; [UIView animateWithDuration:.25 animations:^{ next.view.alpha = 1; }];
     }
 }
-- (void)lock {
+- (void)locked:(NSNotification *)notification {
+    NSError *error = notification.userInfo[@"error"];
+    BOOL automatic = [notification.userInfo[@"allowAutomatic"] boolValue];
+    [self showLogin:error allowAutomatic:automatic];
+}
+- (void)showLogin:(NSError *)error allowAutomatic:(BOOL)automatic {
     [self.timer invalidate]; self.timer = nil; self.checking = NO;
     __weak typeof(self) weakSelf = self;
     KALicenseViewController *login = [[KALicenseViewController alloc] initWithClient:self.client onAuthorized:^(NSDictionary *license) {
@@ -152,6 +176,7 @@
             [owner.client revalidate:^(NSDictionary *value, NSError *error) { owner.checking = NO; }];
         }];
     }];
+    login.allowAutoLogin = automatic; login.lockError = error;
     [self replace:login animated:NO];
 }
 - (void)dealloc { [self.timer invalidate]; [[NSNotificationCenter defaultCenter] removeObserver:self]; }

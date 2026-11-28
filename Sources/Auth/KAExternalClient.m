@@ -1,5 +1,6 @@
 #import "KAExternalClient.h"
 #import "KASecurity.h"
+#import "KAPolicy.h"
 #import <UIKit/UIKit.h>
 
 @interface KAExternalClient () <NSURLSessionTaskDelegate>
@@ -7,6 +8,7 @@
 @property(nonatomic) NSURLSession *network;
 @property(nonatomic) NSString *sessionToken;
 @property(nonatomic) NSString *grant;
+@property(nonatomic) NSString *activeLicense;
 @property(nonatomic) NSString *installationID;
 @property(nonatomic) NSTimeInterval deadline;
 @property(atomic) NSUInteger generation;
@@ -64,12 +66,12 @@
     if (![json[@"data"] isKindOfClass:NSDictionary.class]) { if (error) *error = KAError(@"INVALID_RESPONSE"); return nil; }
     return json[@"data"];
 }
-- (void)clearSession { self.grant = nil; self.sessionToken = nil; self.deadline = 0; }
+- (void)clearSession { self.grant = nil; self.sessionToken = nil; self.deadline = 0; self.activeLicense = nil; }
 - (void)invalidate {
     NSAssert(NSThread.isMainThread, @"Use the main thread");
     self.generation += 1;
     dispatch_async(self.worker, ^{ [self clearSession]; });
-    [[NSNotificationCenter defaultCenter] postNotificationName:KAExternalDidLockNotification object:self];
+    [[NSNotificationCenter defaultCenter] postNotificationName:KAExternalDidLockNotification object:self userInfo:@{@"allowAutomatic":@YES}];
 }
 - (void)forgetLicense {
     [self invalidate]; dispatch_async(self.worker, ^{ KADeleteLicense(); });
@@ -124,9 +126,12 @@
     if (!result) return nil;
     NSDictionary *returned = [result[@"claims"] isKindOfClass:NSDictionary.class] ? result[@"claims"] : nil;
     NSDictionary *license = [result[@"license"] isKindOfClass:NSDictionary.class] ? result[@"license"] : nil;
-    if (![result[@"active"] isEqual:@YES] || ![returned isEqualToDictionary:claims] || !license ||
-        ![license[@"expiresAt"] isKindOfClass:NSNumber.class] || [license[@"expiresAt"] doubleValue] / 1000.0 <= NSDate.date.timeIntervalSince1970 ||
-        NSProcessInfo.processInfo.systemUptime >= self.deadline) {
+    BOOL expiryTyped = [license[@"expiresAt"] isKindOfClass:NSNumber.class];
+    unsigned long long flags = ([result[@"active"] isEqual:@YES] ? 1 : 0) |
+        ([returned isEqualToDictionary:claims] ? 2 : 0) | (license ? 4 : 0) | (expiryTyped ? 8 : 0);
+    if (!KAPolicyAccept(flags, expiryTyped ? [license[@"expiresAt"] unsignedLongLongValue] : 0,
+        (unsigned long long)(NSDate.date.timeIntervalSince1970 * 1000),
+        (unsigned long long)(self.deadline * 1000), (unsigned long long)(NSProcessInfo.processInfo.systemUptime * 1000))) {
         if (error) *error = KAError(@"GRANT_INACTIVE"); return nil;
     }
     return license;
@@ -170,8 +175,46 @@
         if (self.generation != generation) { result = nil; error = KAError(@"CANCELLED"); }
         if (result && remember && !KASaveLicense(normalized, &error)) result = nil;
         if (result && !remember) KADeleteLicense();
-        if (!result) [self clearSession];
+        if (result) self.activeLicense = normalized;
+        if (!result) {
+            if ([@[@"KEY_INVALID",@"KEY_EXPIRED",@"DEVICE_MISMATCH"] containsObject:error.userInfo[@"apiCode"]]) KADeleteLicense();
+            [self clearSession];
+        }
         [self deliver:completion value:result error:error generation:generation];
+    });
+}
+- (void)authorizeOperation:(KACompletion)completion {
+    NSAssert(NSThread.isMainThread, @"Use the main thread");
+    NSUInteger generation = self.generation;
+    dispatch_async(self.worker, ^{
+        NSError *error = nil;
+        NSDictionary *result = nil;
+        if (self.activeLicense.length && self.sessionToken && NSProcessInfo.processInfo.systemUptime < self.deadline) {
+            SecKeyRef key = KACopyDeviceKey(&error);
+            NSDictionary *issued = key ? [self completeChallenge:@"authorization" key:key license:self.activeLicense error:&error] : nil;
+            if (key) CFRelease(key);
+            NSString *fresh = [issued[@"grant"] isKindOfClass:NSString.class] ? issued[@"grant"] : nil;
+            NSDictionary *claims = fresh ? KAVerifyGrant(fresh,self.sessionToken,self.installationID,&error) : nil;
+            if (claims && [claims[@"key"] isEqual:self.activeLicense] && ![fresh isEqual:self.grant]) {
+                self.grant = fresh;
+                result = [self validateCurrent:&error];
+            } else if (!error) error = KAError(@"GRANT_INVALID");
+        } else error = KAError(@"SESSION_EXPIRED");
+        if (!result) [self failClosed:error generation:generation];
+        [self deliver:completion value:result error:error generation:generation];
+    });
+}
+- (void)failClosed:(NSError *)error generation:(NSUInteger)generation {
+    [self clearSession];
+    NSString *code = error.userInfo[@"apiCode"];
+    BOOL terminal = [@[@"KEY_INVALID",@"KEY_EXPIRED",@"DEVICE_MISMATCH",@"GRANT_INACTIVE"] containsObject:code];
+    if (terminal) KADeleteLicense();
+    BOOL retry = [@[@"SESSION_EXPIRED",@"SESSION_NOT_FOUND"] containsObject:code];
+    dispatch_async(dispatch_get_main_queue(), ^{
+        if (self.generation != generation) return;
+        self.generation += 1;
+        [[NSNotificationCenter defaultCenter] postNotificationName:KAExternalDidLockNotification object:self
+            userInfo:@{@"error":error ?: KAError(@"GRANT_INVALID"),@"allowAutomatic":@(retry)}];
     });
 }
 - (void)revalidate:(KACompletion)completion {
@@ -179,12 +222,7 @@
     NSUInteger generation = self.generation;
     dispatch_async(self.worker, ^{
         NSError *error = nil; NSDictionary *result = [self validateCurrent:&error];
-        if (!result) {
-            [self clearSession];
-            dispatch_async(dispatch_get_main_queue(), ^{
-                if (self.generation == generation) [[NSNotificationCenter defaultCenter] postNotificationName:KAExternalDidLockNotification object:self];
-            });
-        }
+        if (!result) [self failClosed:error generation:generation];
         [self deliver:completion value:result error:error generation:generation];
     });
 }

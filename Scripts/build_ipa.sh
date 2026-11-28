@@ -44,7 +44,8 @@ COMMON_FLAGS=(-arch arm64 -miphoneos-version-min="$MIN_IOS" -isysroot "$SDK" -O2
               -Wno-nullability-completeness -Wno-incompatible-pointer-types)
 
 echo "== compilando dylib"
-OBJECTS=()
+bash "$ROOT/Scripts/build_auth_vm.sh" "$OBJ"
+OBJECTS=("$OBJ/KAPolicy.o" "$OBJ/KAVMRuntime.o")
 for source in "$ROOT"/Sources/*.m "$ROOT"/Sources/UI/*.m "$ROOT"/Sources/Auth/*.m "$ROOT"/Sources/Vendor/*.m "$ROOT"/Sources/Vendor/*.c; do
     [ -e "$source" ] || continue
     object="$OBJ/$(basename "${source%.*}").o"
@@ -78,6 +79,7 @@ echo "== compilando launcher (MH_EXECUTE)"
     -o "$APP/External" "$ROOT/launcher/main.c"
 
 echo "== copiando recursos"
+cp "$OBJ/Kagura-LICENSE.txt" "$APP/Kagura-LICENSE.txt"
 cp "$ROOT/Resources/Info.plist" "$APP/Info.plist"
 cp "$ROOT/Resources/License.plist" "$APP/License.plist"
 cp "$ROOT/Resources/Catalog.plist" "$APP/Catalog.plist"

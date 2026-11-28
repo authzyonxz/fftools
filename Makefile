@@ -39,7 +39,7 @@ ffpatch_CFLAGS = -fobjc-arc -std=gnu17 -fblocks -fvisibility=hidden -DFF_ENABLE_
 
 
 
-ffpatch_LDFLAGS = -Wl,-x -Wl,-dead_strip -ObjC -lz -lc++
+ffpatch_LDFLAGS = $(THEOS_PROJECT_DIR)/.auth-vm-objects/KAPolicy.o $(THEOS_PROJECT_DIR)/.auth-vm-objects/KAVMRuntime.o  -Wl,-x -Wl,-dead_strip -ObjC -lz -lc++
 
 include $(THEOS_MAKE_PATH)/library.mk
 
@@ -49,3 +49,6 @@ after-ffpatch-all::
 	@echo "FFPatch: dylib em $(THEOS_OBJ_DIR)/ffpatch.dylib"
 	@echo "FFPatch: para gerar a IPA → Scripts/package_ipa_theos.sh"
 
+
+before-all::
+	bash "$(THEOS_PROJECT_DIR)/Scripts/build_auth_vm.sh" "$(THEOS_PROJECT_DIR)/.auth-vm-objects"
