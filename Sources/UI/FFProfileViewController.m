@@ -1,7 +1,4 @@
-//
-//  FFProfileViewController.m
-//  FFPatch
-//
+
 
 #import "FFProfileViewController.h"
 #import "FFWidgets.h"
@@ -148,7 +145,6 @@
     title.textAlignment = NSTextAlignmentCenter;
     [stack addArrangedSubview:title];
 
-    // ---- license card ------------------------------------------------------
     NSArray<FFValueRowView *> *licenseRows = @[
         [[FFValueRowView alloc] initWithTitle:@"Expiração" value:license.duration monospaced:NO],
         [[FFValueRowView alloc] initWithTitle:@"Status" value:license.status monospaced:NO],
@@ -158,7 +154,6 @@
     ];
     [stack addArrangedSubview:[self cardWithRows:licenseRows]];
 
-    // ---- device card -------------------------------------------------------
     NSArray<FFValueRowView *> *deviceRows = @[
         [[FFValueRowView alloc] initWithTitle:@"Modelo" value:license.deviceModel monospaced:YES],
         [[FFValueRowView alloc] initWithTitle:@"iOS" value:license.deviceOS monospaced:NO],
@@ -167,7 +162,6 @@
     ];
     [stack addArrangedSubview:[self cardWithRows:deviceRows]];
 
-    // ---- actions -----------------------------------------------------------
     UIButton *syncButton = [UIButton buttonWithType:UIButtonTypeSystem];
     syncButton.translatesAutoresizingMaskIntoConstraints = NO;
     [syncButton setTitle:@"SINCRONIZAR CATÁLOGO" forState:UIControlStateNormal];

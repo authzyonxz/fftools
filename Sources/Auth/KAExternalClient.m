@@ -1,6 +1,8 @@
 #import "KAExternalClient.h"
 #import "KASecurity.h"
 #import "KAPolicy.h"
+#import "KAIntegrity.h"
+#import <math.h>
 #import <UIKit/UIKit.h>
 
 @interface KAExternalClient () <NSURLSessionTaskDelegate>
@@ -9,6 +11,8 @@
 @property(nonatomic) NSString *sessionToken;
 @property(nonatomic) NSString *grant;
 @property(nonatomic) NSString *activeLicense;
+@property(nonatomic) BOOL rememberLicense;
+@property(nonatomic) NSMutableSet<NSString *> *seenGrants;
 @property(nonatomic) NSString *installationID;
 @property(nonatomic) NSTimeInterval deadline;
 @property(atomic) NSUInteger generation;
@@ -28,11 +32,11 @@
     }
     return self;
 }
-// Never follow a redirect carrying license/session material, even on the same origin.
+
 - (void)URLSession:(NSURLSession *)session task:(NSURLSessionTask *)task
  willPerformHTTPRedirection:(NSHTTPURLResponse *)response newRequest:(NSURLRequest *)request
  completionHandler:(void (^)(NSURLRequest * _Nullable))completionHandler { completionHandler(nil); }
-// Default platform TLS trust remains enabled. No "accept all certificates" delegate.
+
 - (NSDictionary *)post:(NSString *)path body:(NSDictionary *)body error:(NSError **)error {
     NSMutableURLRequest *request = [NSMutableURLRequest requestWithURL:[NSURL URLWithString:[@"https://keyauthv2.org/api/v2" stringByAppendingString:path]]];
     request.HTTPMethod = @"POST";
@@ -66,7 +70,7 @@
     if (![json[@"data"] isKindOfClass:NSDictionary.class]) { if (error) *error = KAError(@"INVALID_RESPONSE"); return nil; }
     return json[@"data"];
 }
-- (void)clearSession { self.grant = nil; self.sessionToken = nil; self.deadline = 0; self.activeLicense = nil; }
+- (void)clearSession { self.grant = nil; self.sessionToken = nil; self.deadline = 0; self.activeLicense = nil; self.seenGrants = [NSMutableSet new]; }
 - (void)invalidate {
     NSAssert(NSThread.isMainThread, @"Use the main thread");
     self.generation += 1;
@@ -74,7 +78,7 @@
     [[NSNotificationCenter defaultCenter] postNotificationName:KAExternalDidLockNotification object:self userInfo:@{@"allowAutomatic":@YES}];
 }
 - (void)forgetLicense {
-    [self invalidate]; dispatch_async(self.worker, ^{ KADeleteLicense(); });
+    KADeleteLicense(); [self invalidate];
 }
 - (void)deliver:(KACompletion)completion value:(NSDictionary *)value error:(NSError *)error generation:(NSUInteger)generation {
     dispatch_async(dispatch_get_main_queue(), ^{
@@ -108,7 +112,7 @@
         ![fields[@"sessionHash"] isEqual:KAB64(KAHash([self.sessionToken dataUsingEncoding:NSUTF8StringEncoding]))]) {
         if (error) *error = KAError(@"CHALLENGE_INVALID"); return nil;
     }
-    // Sign exact UTF-8 canonical bytes, not a reserialized JSON dictionary.
+
     NSData *signature = CFBridgingRelease(SecKeyCreateSignature(key, kSecKeyAlgorithmECDSASignatureMessageX962SHA256, (__bridge CFDataRef)message, NULL));
     if (!signature) { if (error) *error = KAError(@"SECURE_KEY"); return nil; }
     NSMutableDictionary *proof = [@{@"token":self.sessionToken, @"challengeId":challenge[@"challengeId"],
@@ -117,6 +121,7 @@
     return [self post:[purpose isEqual:@"enrollment"] ? @"/installations/complete" : @"/authorization/issue" body:proof error:error];
 }
 - (NSDictionary *)validateCurrent:(NSError **)error {
+    if (!KAIntegrityCheck()) { if (error) *error = KAError(@"INTEGRITY"); return nil; }
     if (!self.grant || !self.sessionToken || NSProcessInfo.processInfo.systemUptime >= self.deadline) {
         if (error) *error = KAError(@"SESSION_EXPIRED"); return nil;
     }
@@ -126,7 +131,9 @@
     if (!result) return nil;
     NSDictionary *returned = [result[@"claims"] isKindOfClass:NSDictionary.class] ? result[@"claims"] : nil;
     NSDictionary *license = [result[@"license"] isKindOfClass:NSDictionary.class] ? result[@"license"] : nil;
-    BOOL expiryTyped = [license[@"expiresAt"] isKindOfClass:NSNumber.class];
+    BOOL expiryTyped = [license[@"expiresAt"] isKindOfClass:NSNumber.class] &&
+        isfinite([license[@"expiresAt"] doubleValue]) && [license[@"expiresAt"] doubleValue] > 0 &&
+        [license[@"expiresAt"] doubleValue] < 9007199254740991.0;
     unsigned long long flags = ([result[@"active"] isEqual:@YES] ? 1 : 0) |
         ([returned isEqualToDictionary:claims] ? 2 : 0) | (license ? 4 : 0) | (expiryTyped ? 8 : 0);
     if (!KAPolicyAccept(flags, expiryTyped ? [license[@"expiresAt"] unsignedLongLongValue] : 0,
@@ -136,27 +143,28 @@
     }
     return license;
 }
-- (void)loginWithLicense:(NSString *)license remember:(BOOL)remember completion:(KACompletion)completion {
-    NSAssert(NSThread.isMainThread, @"Use the main thread");
-    NSUInteger generation = ++self.generation;
-    dispatch_async(self.worker, ^{
+
+- (NSDictionary *)authenticate:(NSString *)license remember:(BOOL)remember generation:(NSUInteger)generation error:(NSError **)failure {
+    if (self.generation != generation) { *failure = KAError(@"CANCELLED"); return nil; }
+        NSString *credential = [license copy];
         [self clearSession]; NSError *error = nil;
-        NSString *normalized = [[[license uppercaseString] componentsSeparatedByCharactersInSet:NSCharacterSet.whitespaceAndNewlineCharacterSet] componentsJoinedByString:@""];
+        if (!KAIntegrityCheck()) { *failure = KAError(@"INTEGRITY"); return nil; }
+        NSString *normalized = [[[credential uppercaseString] componentsSeparatedByCharactersInSet:NSCharacterSet.whitespaceAndNewlineCharacterSet] componentsJoinedByString:@""];
         if (normalized.length == 0) normalized = KAReadLicense(&error);
-        if (!normalized.length) { [self deliver:completion value:nil error:error ?: KAError(@"KEY_REQUIRED") generation:generation]; return; }
+        if (!normalized.length) { *failure = error ?: KAError(@"KEY_REQUIRED"); return nil; }
         NSRegularExpression *format = [NSRegularExpression regularExpressionWithPattern:@"^[A-Z1-9]{15}$" options:0 error:NULL];
         if ([format numberOfMatchesInString:normalized options:0 range:NSMakeRange(0, normalized.length)] != 1) {
-            [self deliver:completion value:nil error:KAError(@"KEY_FORMAT") generation:generation]; return;
+            *failure = KAError(@"KEY_FORMAT"); return nil;
         }
         SecKeyRef key = KACopyDeviceKey(&error);
-        if (!key) { [self deliver:completion value:nil error:error generation:generation]; return; }
+        if (!key) { *failure = error; return nil; }
         SecKeyRef pub = SecKeyCopyPublicKey(key);
         NSData *raw = pub ? CFBridgingRelease(SecKeyCopyExternalRepresentation(pub, NULL)) : nil;
         if (pub) CFRelease(pub);
         self.installationID = raw ? KAB64(KAHash(raw)) : nil;
         NSDictionary *start = self.installationID ? [self post:@"/device/session/start" body:@{@"package":@"external1"} error:&error] : nil;
         if (![start[@"token"] isKindOfClass:NSString.class] || [start[@"token"] length] < 20 || ![start[@"expiresAt"] isKindOfClass:NSNumber.class]) {
-            CFRelease(key); [self deliver:completion value:nil error:error ?: KAError(@"INVALID_RESPONSE") generation:generation]; return;
+            CFRelease(key); *failure = error ?: KAError(@"INVALID_RESPONSE"); return nil;
         }
         self.sessionToken = start[@"token"];
         NSDictionary *enrollment = [self completeChallenge:@"enrollment" key:key license:nil error:&error];
@@ -164,7 +172,7 @@
         if ([enrollment[@"completed"] isEqual:@YES]) issued = [self completeChallenge:@"authorization" key:key license:normalized error:&error];
         CFRelease(key);
         if (![issued[@"grant"] isKindOfClass:NSString.class]) {
-            [self clearSession]; [self deliver:completion value:nil error:error ?: KAError(@"INVALID_RESPONSE") generation:generation]; return;
+            [self clearSession]; *failure = error ?: KAError(@"INVALID_RESPONSE"); return nil;
         }
         self.grant = issued[@"grant"];
         NSDictionary *claims = KAVerifyGrant(self.grant, self.sessionToken, self.installationID, &error);
@@ -175,11 +183,21 @@
         if (self.generation != generation) { result = nil; error = KAError(@"CANCELLED"); }
         if (result && remember && !KASaveLicense(normalized, &error)) result = nil;
         if (result && !remember) KADeleteLicense();
-        if (result) self.activeLicense = normalized;
+        if (result) { self.activeLicense = normalized; self.rememberLicense = remember; [self.seenGrants addObject:self.grant]; }
         if (!result) {
             if ([@[@"KEY_INVALID",@"KEY_EXPIRED",@"DEVICE_MISMATCH"] containsObject:error.userInfo[@"apiCode"]]) KADeleteLicense();
             [self clearSession];
         }
+    *failure = error;
+    return result;
+}
+- (void)loginWithLicense:(NSString *)license remember:(BOOL)remember completion:(KACompletion)completion {
+    NSAssert(NSThread.isMainThread, @"Use the main thread");
+    NSUInteger generation = ++self.generation;
+    dispatch_async(self.worker, ^{
+        NSError *error = nil;
+        NSDictionary *result = [self authenticate:license remember:remember generation:generation error:&error];
+        if (!result && [@[@"KEY_INVALID",@"KEY_EXPIRED",@"DEVICE_MISMATCH"] containsObject:error.userInfo[@"apiCode"]]) KADeleteLicense();
         [self deliver:completion value:result error:error generation:generation];
     });
 }
@@ -187,16 +205,21 @@
     NSAssert(NSThread.isMainThread, @"Use the main thread");
     NSUInteger generation = self.generation;
     dispatch_async(self.worker, ^{
+        if (self.generation != generation) { [self deliver:completion value:nil error:KAError(@"CANCELLED") generation:generation]; return; }
         NSError *error = nil;
         NSDictionary *result = nil;
-        if (self.activeLicense.length && self.sessionToken && NSProcessInfo.processInfo.systemUptime < self.deadline) {
+        if (!KAIntegrityCheck()) error = KAError(@"INTEGRITY");
+        else if (self.activeLicense.length && self.deadline - NSProcessInfo.processInfo.systemUptime < 60) {
+            result = [self authenticate:self.activeLicense remember:self.rememberLicense generation:generation error:&error];
+        }
+        else if (self.activeLicense.length && self.sessionToken && NSProcessInfo.processInfo.systemUptime < self.deadline) {
             SecKeyRef key = KACopyDeviceKey(&error);
             NSDictionary *issued = key ? [self completeChallenge:@"authorization" key:key license:self.activeLicense error:&error] : nil;
             if (key) CFRelease(key);
             NSString *fresh = [issued[@"grant"] isKindOfClass:NSString.class] ? issued[@"grant"] : nil;
             NSDictionary *claims = fresh ? KAVerifyGrant(fresh,self.sessionToken,self.installationID,&error) : nil;
-            if (claims && [claims[@"key"] isEqual:self.activeLicense] && ![fresh isEqual:self.grant]) {
-                self.grant = fresh;
+            if (claims && [claims[@"key"] isEqual:self.activeLicense] && ![self.seenGrants containsObject:fresh]) {
+                self.grant = fresh; [self.seenGrants addObject:fresh];
                 result = [self validateCurrent:&error];
             } else if (!error) error = KAError(@"GRANT_INVALID");
         } else error = KAError(@"SESSION_EXPIRED");
@@ -221,7 +244,12 @@
     NSAssert(NSThread.isMainThread, @"Use the main thread");
     NSUInteger generation = self.generation;
     dispatch_async(self.worker, ^{
-        NSError *error = nil; NSDictionary *result = [self validateCurrent:&error];
+        if (self.generation != generation) { [self deliver:completion value:nil error:KAError(@"CANCELLED") generation:generation]; return; }
+        NSError *error = nil;
+        NSDictionary *result = nil;
+        if (self.activeLicense.length && self.deadline - NSProcessInfo.processInfo.systemUptime < 60)
+            result = [self authenticate:self.activeLicense remember:self.rememberLicense generation:generation error:&error];
+        else result = [self validateCurrent:&error];
         if (!result) [self failClosed:error generation:generation];
         [self deliver:completion value:result error:error generation:generation];
     });
@@ -231,7 +259,7 @@
     if ([format numberOfMatchesInString:functionID options:0 range:NSMakeRange(0,functionID.length)] != 1) { completion(nil, KAError(@"INVALID_RESPONSE")); return; }
     [self revalidate:^(NSDictionary *license, NSError *error) {
         if (error) { completion(nil,error); return; }
-        // Main-thread callback: take a snapshot on worker to avoid a concurrent invalidate/login race.
+
         NSUInteger generation = self.generation;
         dispatch_async(self.worker, ^{
             NSMutableURLRequest *request = nil;

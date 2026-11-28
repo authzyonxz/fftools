@@ -1,7 +1,4 @@
-//
-//  FFHomeViewController.m
-//  FFPatch
-//
+
 
 #import "FFHomeViewController.h"
 #import "FFWidgets.h"
@@ -318,10 +315,7 @@ static FFGame *FFNormalGame(FFManifest *manifest) {
             BOOL success = NO;
 
             if (isOn) {
-                // The probe is advisory only. On iOS 26.x bad_query the probe
-                // used to fail and the app refused to even try, although the
-                // container grant works. Activate if needed, then attempt the
-                // apply regardless — the real gate is the container grant.
+
                 if (!FFSandboxAccessActive()) {
                     NSString *activationDetail = nil;
                     BOOL activated = FFSandboxActivate(&activationDetail);
@@ -331,7 +325,7 @@ static FFGame *FFNormalGame(FFManifest *manifest) {
                 if (!FFSandboxOSIsSupported()) {
                     error = FFMakeError(FFErrorUnsupportedOS, @"%@", FFSandboxUnsupportedReason());
                 } else {
-                    // Exclusive groups: restore siblings before applying this posture.
+
                     for (FFFunction *sibling in siblings) {
                         if ([self.engine stateForFunction:sibling game:game] == FFFunctionStateApplied) {
                             [self.engine restoreFunction:sibling game:game error:NULL];
@@ -340,7 +334,7 @@ static FFGame *FFNormalGame(FFManifest *manifest) {
                     success = [self.engine applyFunction:function game:game stats:NULL error:&error];
                 }
             } else {
-                // Restoring originals remains available without API authorization.
+
                 FFSandboxWaitForActivation();
                 if (FFSandboxCurrentBackend() == FFSandboxBackendKernel && !FFSandboxAccessActive()) {
                     error = FFMakeError(FFErrorNoSandboxAccess, @"acesso ao container não está ativo");

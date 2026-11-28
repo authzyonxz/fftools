@@ -1,7 +1,4 @@
-//
-//  FFSandbox.m
-//  FFPatch
-//
+
 
 #import "FFSandbox.h"
 #import "FFCore.h"
@@ -20,7 +17,7 @@
 
 static BOOL FFSupportsKernelExploit(int major, int minor, int patch, BOOL isA10) {
     if (minor < 0 || patch < 0) return NO;
-    // A10 Fusion hangs inside the kernel chain on iOS 17 — refused by chip.
+
     if (isA10 && major == 17) return NO;
     if (major == 17) return minor <= 7;
     if (major == 18) return minor < 7 || (minor == 7 && patch <= 1);
@@ -33,7 +30,7 @@ static BOOL FFSupportsBadQuery(int major, int minor, int patch) {
 }
 
 static NSArray<NSString *> *FFVerifiedIOS27Builds(void) {
-    // 27.3 beta 2 (24C5049d) patched worse_query. Only beta 1 is verified.
+
     static NSArray<NSString *> *builds;
     static dispatch_once_t onceToken;
     dispatch_once(&onceToken, ^{
@@ -120,12 +117,6 @@ NSString *FFSandboxUnsupportedReason(void) {
 
 #pragma mark - Serialisation
 
-/*! Every worse_query entry point (grant, release, recover, reset, invalidate)
-    swaps the App Group's Library/Caches window. Those swaps are not reentrant
-    across the process, and overlapping them is the known way to wedge
-    containermanagerd (which surfaces as the app resigning or the device
-    respringing). One recursive lock owns all of it; it is recursive because the
-    probe calls the grant helper. */
 static NSRecursiveLock *FFSandboxOperationLock(void) {
     static NSRecursiveLock *lock;
     static dispatch_once_t onceToken;
@@ -159,21 +150,15 @@ static int64_t FFSandboxGrantPathLocked(NSString *clean, BOOL writable) {
 
     switch (FFSandboxCurrentBackend()) {
         case FFSandboxBackendKernel:
-            // No grant object: the kernel escape already removed the sandbox
-            // restriction. -1 means "not needed", not "failed".
+
             return -1;
         case FFSandboxBackendBadQuery:
             return bad_query((char *)raw, true, NULL, false);
         case FFSandboxBackendWorseQuery: {
             handle = writable ? worse_query_grant_ex(raw, 1) : worse_query_grant(raw);
 
-            // Only -5 (unrepairable Caches state / query miss) is retried, and
-            // at most once per minute: a failed grant is never cached, so every
-            // retry costs a full Begin+Recover swap. -6/-7/-8 mean "this path
-            // cannot be minted / does not cover the target" — retrying them
-            // only multiplies swaps and forget_all revokes other threads' tokens.
             if (handle == -5) {
-                // Called under FFSandboxOperationLock, so this flag needs no lock.
+
                 static NSDate *lastRepair;
                 static BOOL repairedOnce;
                 NSTimeInterval since = (lastRepair == nil) ? 1.0e18
@@ -258,10 +243,7 @@ static BOOL FFSandboxProbeUncached(void) {
             return sandbox_access_is_active() == 1;
 
         case FFSandboxBackendBadQuery: {
-            // 3105's recipe: the app is signed as com.apple.mobile.MobileHouseArrest,
-            // so containermanagerd trusts it and the MHA-C2 activation returns
-            // the container with a usable extension. Probe that first; only if
-            // the identity is missing fall back to the container sweep.
+
             if (FFSandboxHostIsMobileHouseArrest()) {
                 NSString *mcmError = nil;
                 NSString *ownContainer = MCMActivateContainerPath(
@@ -273,8 +255,7 @@ static BOOL FFSandboxProbeUncached(void) {
                         FFLog(@"sandbox: bad_query ativo via MHA-C2 (%@)", ownContainer.lastPathComponent);
                         return YES;
                     }
-                    // MHA activated but no explicit token: the lease itself is
-                    // the grant, so treat activation as success and log it.
+
                     if ([[NSFileManager defaultManager] fileExistsAtPath:ownContainer]) {
                         FFLog(@"sandbox: MHA-C2 lease ativo (%@)", mcmError ?: @"sem erro");
                         return YES;
@@ -322,9 +303,7 @@ static BOOL FFSandboxProbeUncached(void) {
             } else {
                 groupPath = [@"/var/mobile/Containers/Shared/AppGroup" stringByAppendingPathComponent:group];
             }
-            // Only the App Group is probed: it is the one path worse_query can
-            // always grant, and granting /var/mobile/Containers/Data here just
-            // burns a swap and fails with -6 on iOS 27.
+
             int64_t handle = FFSandboxGrantPath(groupPath, YES, NULL);
             if (handle >= 0) {
                 FFSandboxReleaseHandle(handle);
@@ -366,7 +345,7 @@ BOOL FFSandboxAccessActive(void) {
     [operationLock lock];
     BOOL value = NO;
     @try {
-        // Re-check inside the lock: two callers may have raced past the cache.
+
         [FFProbeLock() lock];
         BOOL stillCached = FFProbeCachedValid && FFProbeCachedAt != nil;
         if (stillCached) value = FFProbeCachedValue;
@@ -391,8 +370,7 @@ void FFSandboxWaitForActivation(void) {
     NSLock *activationLock = FFSandboxActivationLock();
     [activationLock lock];
     [activationLock unlock];
-    // Also wait for any in-flight grant/repair so a restore never runs
-    // container I/O while the Caches window is swapped.
+
     NSRecursiveLock *operationLock = FFSandboxOperationLock();
     [operationLock lock];
     [operationLock unlock];
@@ -437,9 +415,7 @@ static BOOL FFSandboxActivateLocked(NSString **detailOut) {
             FFLog(@"kexploit: repetição bloqueada nesta sessão");
             return NO;
         }
-        // Crash guard: a kernel chain that panics the device leaves the app
-        // dead before it can clear this flag. On the next launch the automatic
-        // attempt is skipped once, so a bad build cannot turn into a boot loop.
+
         NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
         if ([defaults boolForKey:@"FFKernelChainRunning"]) {
             FFLog(@"kexploit: tentativa anterior interrompeu o app — cadeia automática bloqueada "
@@ -449,8 +425,6 @@ static BOOL FFSandboxActivateLocked(NSString **detailOut) {
             return NO;
         }
 
-        // Jailbroken devices patch the sandbox themselves: the chain result is
-        // not attributable to us, so do not claim a state we cannot stand behind.
         BOOL looksJailbroken = [[NSFileManager defaultManager] fileExistsAtPath:@"/var/jb"] ||
                                [[NSFileManager defaultManager] fileExistsAtPath:@"/usr/lib/libsubstitute.dylib"] ||
                                [[NSFileManager defaultManager] fileExistsAtPath:@"/usr/lib/libhooker.dylib"] ||
@@ -488,8 +462,6 @@ static BOOL FFSandboxActivateLocked(NSString **detailOut) {
         BOOL active = sandbox_access_is_active() == 1;
         FFLog(@"kexploit: sandbox_escape ret=%d probe=%d", escapeResult, (int)active);
 
-        // Below iOS 26 the kernel r/w is useful even when the escape's own probe
-        // samples badly, so a failed probe degrades instead of aborting.
         if (!active && escapeResult != 0) {
             if (detailOut) *detailOut = [NSString stringWithFormat:
                 @"sandbox escape falhou (retorno %d).", escapeResult];
@@ -509,9 +481,7 @@ static BOOL FFSandboxActivateLocked(NSString **detailOut) {
                                         @"ou com um App ID explícito com a capability App Groups.";
             return NO;
         }
-        // Heal an interrupted Caches swap before the first grant; a failed
-        // recovery is repaired once with the hard reset, because every later
-        // grant would fail with -5 otherwise.
+
         if (!worse_query_recover()) {
             FFLog(@"exploit: recover de Caches falhou — resetando access cache");
             worse_query_reset_access_cache();
@@ -594,7 +564,6 @@ BOOL FFSandboxPerformWithGrant(NSString *directory,
         return NO;
     }
 
-    // A stale token in the LRU is the usual suspect after a denied write.
     FFSandboxInvalidateCaches();
     handle = FFSandboxGrantPath(directory, writable, &grantCode);
     if (handle < 0) {

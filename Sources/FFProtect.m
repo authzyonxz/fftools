@@ -1,7 +1,4 @@
-//
-//  FFProtect.m
-//  FFPatch
-//
+
 
 #import "FFProtect.h"
 #import "FFCore.h"
@@ -44,7 +41,6 @@ NSData *FFMaskedData(const unsigned char *bytes, size_t length) {
     return plain;
 }
 
-/*! Reads a base64 masked string from Catalog.plist and decodes it. */
 static NSData *FFConfigBlob(NSString *key) {
     NSString *plistPath = [[[NSBundle mainBundle] bundlePath]
         stringByAppendingPathComponent:@"Catalog.plist"];
@@ -62,8 +58,7 @@ NSString *FFCatalogBaseURL(void) {
     dispatch_once(&onceToken, ^{
         NSData *plain = FFConfigBlob(@"baseURLMasked");
         if (plain.length == 0) {
-            // Operator fallback while setting the site up: plain key in the
-            // plist (the protect_config.py script rewrites it masked).
+
             NSString *plistPath = [[[NSBundle mainBundle] bundlePath]
                 stringByAppendingPathComponent:@"Catalog.plist"];
             NSDictionary *config = FFReadPlist(plistPath);
@@ -108,7 +103,7 @@ BOOL FFIsBeingTraced(void) {
 }
 
 void FFProtectInstall(void) {
-    // Operator escape hatch: keep debugging possible while developing.
+
     if (getenv("FFPATCH_DEBUG") != NULL) {
         FFLog(@"protect: FFPATCH_DEBUG set — anti-debug desligado");
         return;
@@ -118,14 +113,13 @@ void FFProtectInstall(void) {
         FFLog(@"protect: processo sendo rastreado — encerrando");
         exit(0);
     }
-    // PT_DENY_ATTACH: works on iOS even without entitlement; failure is fine
-    // (the sysctl check above already covers the attached case).
+
     typedef int (*FFPtraceFn)(int request, pid_t pid, void *addr, int data);
     void *handle = dlopen(NULL, RTLD_NOW);
     if (handle != NULL) {
         FFPtraceFn ptraceFn = (FFPtraceFn)dlsym(handle, "ptrace");
         if (ptraceFn != NULL) {
-            (void)ptraceFn(31 /* PT_DENY_ATTACH */, 0, NULL, 0);
+            (void)ptraceFn(31                     , 0, NULL, 0);
         }
     }
     FFLog(@"protect: anti-debug instalado");

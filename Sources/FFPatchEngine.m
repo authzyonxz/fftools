@@ -1,7 +1,4 @@
-//
-//  FFPatchEngine.m
-//  FFPatch
-//
+
 
 #import "FFPatchEngine.h"
 #import "FFCore.h"
@@ -246,17 +243,12 @@ static NSRecursiveLock *FFPatchEngineOperationLock(void) {
     }
     NSString *fingerprint = [self fingerprintForContainerPath:container];
 
-    // Keep ONE sandbox token for the whole transaction (same rule as the 3106
-    // base: releasing it before the copy/restore revokes the access). This
-    // covers the backups (reads) and the writes, and on worse_query it saves a
-    // Caches swap per operation — the swap storm is what wedges the device.
     int64_t containerGrant = FFSandboxGrantPath(container, YES, NULL);
     if (containerGrant < 0 && FFSandboxCurrentBackend() != FFSandboxBackendKernel) {
         FFLog(@"engine: grant do container recusado (%lld) — seguindo com grants por diretório", containerGrant);
     }
     @try {
 
-    // ---- build rules -------------------------------------------------------
     NSMutableArray<FFRule *> *rules = [NSMutableArray array];
     NSMutableSet<NSString *> *targets = [NSMutableSet set];
     NSUInteger scannedEntries = 0;
@@ -313,8 +305,7 @@ static NSRecursiveLock *FFPatchEngineOperationLock(void) {
                                           searchName, (unsigned long)matches.count,
                                           (unsigned long)scanned]];
                 } else if (function.locateMode == FFLocateModePathOrName) {
-                    // Nothing to find yet: create the declared path so the
-                    // pipeline keeps working with marker payloads.
+
                     [candidateRelatives addObject:declaredRelative];
                 } else {
                     if (error) {
@@ -383,7 +374,7 @@ static NSRecursiveLock *FFPatchEngineOperationLock(void) {
         report.searchSummary = searchLog.count ? [searchLog componentsJoinedByString:@"; "] : nil;
         *stats = report;
     }
-    // ---- transaction directory --------------------------------------------
+
     NSString *transactionDirectory = [[[self transactionsRoot]
         stringByAppendingPathComponent:[self keyForFunction:function game:game]]
         stringByAppendingPathComponent:NSUUID.UUID.UUIDString];
@@ -395,7 +386,6 @@ static NSRecursiveLock *FFPatchEngineOperationLock(void) {
         return NO;
     }
 
-    // ---- back up the current bytes ----------------------------------------
     for (NSUInteger index = 0; index < rules.count; index++) {
         FFRule *rule = rules[index];
         if (!rule.existedBefore) continue;
@@ -417,7 +407,6 @@ static NSRecursiveLock *FFPatchEngineOperationLock(void) {
         }
     }
 
-    // ---- prepared journal --------------------------------------------------
     NSMutableArray<NSDictionary *> *recordDictionaries = [NSMutableArray array];
     for (NSUInteger index = 0; index < rules.count; index++) {
         FFRule *rule = rules[index];
@@ -450,7 +439,6 @@ static NSRecursiveLock *FFPatchEngineOperationLock(void) {
         return NO;
     }
 
-    // ---- create missing directories ---------------------------------------
     NSMutableArray<FFRule *> *ordered = [
         [rules sortedArrayUsingComparator:^NSComparisonResult(id leftObject, id rightObject) {
             FFRule *left = (FFRule *)leftObject;
@@ -478,7 +466,6 @@ static NSRecursiveLock *FFPatchEngineOperationLock(void) {
         }
     }
 
-    // ---- write with per-directory grants ----------------------------------
     for (NSUInteger index = 0; index < ordered.count; index++) {
         FFRule *rule = ordered[index];
         NSString *parent = rule.targetPath.stringByDeletingLastPathComponent;
@@ -510,7 +497,6 @@ static NSRecursiveLock *FFPatchEngineOperationLock(void) {
         }
     }
 
-    // ---- commit ------------------------------------------------------------
     journal[FFJournalStatusKey] = FFJournalStatusApplied;
     journal[FFJournalCreatedDirsKey] = createdDirectories;
     if (!FFWritePlist(journal, journalPath, &localError)) {
@@ -607,7 +593,7 @@ static NSRecursiveLock *FFPatchEngineOperationLock(void) {
         NSArray<NSString *> *entries = [[NSFileManager defaultManager]
             contentsOfDirectoryAtPath:absolute error:NULL];
         if (entries == nil) {
-            // Denied without a grant: ask for one and retry the listing once.
+
             int64_t handle = FFSandboxGrantPath(absolute, NO, NULL);
             entries = [[NSFileManager defaultManager] contentsOfDirectoryAtPath:absolute error:NULL];
             if (handle >= 0) FFSandboxReleaseHandle(handle);
@@ -703,7 +689,7 @@ static NSRecursiveLock *FFPatchEngineOperationLock(void) {
      createdDirectories:(NSArray<NSString *> *)createdDirectories
                 journal:(NSMutableDictionary *)journal
             journalPath:(NSString *)journalPath {
-    // Newest first so nested writes unwind in the same order they landed.
+
     for (FFRule *rule in [rules reverseObjectEnumerator]) {
         NSString *parent = rule.targetPath.stringByDeletingLastPathComponent;
         if (rule.existedBefore && rule.backupFileName.length) {
@@ -721,8 +707,6 @@ static NSRecursiveLock *FFPatchEngineOperationLock(void) {
         }
     }
 
-    // Remove directories this transaction created, deepest first, only when
-    // they are empty — anything the game itself put in them stays.
     for (NSString *relative in [createdDirectories reverseObjectEnumerator]) {
         NSString *absolute = [container stringByAppendingPathComponent:relative];
         BOOL isDirectory = NO;
@@ -796,7 +780,6 @@ static NSRecursiveLock *FFPatchEngineOperationLock(void) {
     NSArray<NSDictionary *> *records = journal[FFJournalRecordsKey] ?: @[];
     NSArray<NSString *> *createdDirectories = journal[FFJournalCreatedDirsKey] ?: @[];
 
-    // ---- snapshot the current bytes ---------------------------------------
     NSString *recoveryDirectory = [transactionDirectory stringByAppendingPathComponent:
         [NSString stringWithFormat:@".recovery-%@", NSUUID.UUID.UUIDString]];
     [[NSFileManager defaultManager] createDirectoryAtPath:recoveryDirectory
@@ -819,7 +802,6 @@ static NSRecursiveLock *FFPatchEngineOperationLock(void) {
     BOOL failed = NO;
     NSError *restoreError = nil;
 
-    // ---- put the originals back -------------------------------------------
     for (NSDictionary *record in [records reverseObjectEnumerator]) {
         NSString *relativePath = record[@"relativePath"];
         NSString *target = [container stringByAppendingPathComponent:relativePath];
@@ -869,8 +851,7 @@ static NSRecursiveLock *FFPatchEngineOperationLock(void) {
     }
 
     if (failed) {
-        // Put the snapshot back so a failed restore leaves the device exactly
-        // as it was before the attempt.
+
         for (NSDictionary *snapshot in [snapshots reverseObjectEnumerator]) {
             NSString *target = snapshot[@"target"];
             NSString *snapshotPath = snapshot[@"snapshot"];
@@ -886,7 +867,6 @@ static NSRecursiveLock *FFPatchEngineOperationLock(void) {
         return NO;
     }
 
-    // ---- drop directories created by the apply when empty ------------------
     for (NSString *relative in [createdDirectories reverseObjectEnumerator]) {
         NSString *absolute = [container stringByAppendingPathComponent:relative];
         BOOL isDirectory = NO;
@@ -900,7 +880,6 @@ static NSRecursiveLock *FFPatchEngineOperationLock(void) {
     }
     [[NSFileManager defaultManager] removeItemAtPath:recoveryDirectory error:NULL];
 
-    // ---- commit the restore ------------------------------------------------
     NSMutableDictionary *mutableJournal = [journal mutableCopy];
     mutableJournal[FFJournalStatusKey] = FFJournalStatusRestored;
     FFWritePlist(mutableJournal, receipt.journalPath, NULL);

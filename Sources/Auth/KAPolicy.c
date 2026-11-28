@@ -6,7 +6,7 @@ int KAPolicyAccept(unsigned long long flags, unsigned long long expiry,
     if (flags != 15) return 0;
     if (now == 0 || uptime == 0) return 0;
     if (expiry <= now || deadline <= uptime) return 0;
-    /* A grant/session can never extend its monotonic lease beyond five minutes. */
+
     if (deadline - uptime > 300000) return 0;
     return 1;
 }

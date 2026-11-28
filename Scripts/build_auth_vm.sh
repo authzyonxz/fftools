@@ -27,18 +27,24 @@ RUNTIME="$CACHE/kagura/runtime/core/vm_interpreter.c"
 transform() {
     "$OPT" -load-pass-plugin="$PLUGIN" -kagura-vm \
         -passes='function(kagura-vm),verify' -S "$1" -o "$2"
-    # Fail the release if unsupported IR was silently left unvirtualized.
+
     grep -q '@kagura_vm_bc_' "$2"
     grep -q 'call.*@kagura_vm_execute' "$2"
 }
-# Execute virtualized host code against boundary and tampered-state cases.
+
 MACSDK="$(xcrun --sdk macosx --show-sdk-path)"
 "$CC" -isysroot "$MACSDK" -O1 -S -emit-llvm "$ROOT/Sources/Auth/KAPolicy.c" -o "$OUT/policy-host.ll"
 transform "$OUT/policy-host.ll" "$OUT/policy-host-vm.ll"
 "$CC" -isysroot "$MACSDK" -O2 -I"$CACHE/kagura/include" -I"$ROOT/Sources/Auth" \
     "$OUT/policy-host-vm.ll" "$RUNTIME" "$ROOT/Tests/auth_policy_test.c" -o "$OUT/auth-policy-test"
 "$OUT/auth-policy-test"
-# Upstream LLVM produces only this pure C object. UIKit stays on Apple clang.
+"$CC" -isysroot "$MACSDK" -O2 -c "$OUT/policy-host-vm.ll" -o "$OUT/policy-host.o"
+"$CC" -isysroot "$MACSDK" -O2 -I"$CACHE/kagura/include" -c "$RUNTIME" -o "$OUT/runtime-host.o"
+xcrun clang -isysroot "$MACSDK" -fobjc-arc -fmodules -I"$ROOT/Sources/Auth" \
+    "$ROOT/Sources/Auth/KAIntegrity.m" "$ROOT/Tests/auth_integrity_test.m" \
+    "$OUT/policy-host.o" "$OUT/runtime-host.o" -framework Foundation -framework Security -o "$OUT/auth-integrity-test"
+"$OUT/auth-integrity-test"
+
 "$CC" -target arm64-apple-ios15.0 -isysroot "$SDK" -O1 -S -emit-llvm \
     "$ROOT/Sources/Auth/KAPolicy.c" -o "$OUT/policy-ios.ll"
 transform "$OUT/policy-ios.ll" "$OUT/policy-ios-vm.ll"

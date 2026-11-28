@@ -50,6 +50,12 @@ jobs:
           print("Catalog URL and secret match; both remain masked in the plist.")
           PY
 
+      - name: Verify signed license rejection cases
+        run: |
+          node Tests/create-grant-fixtures.cjs
+          xcrun clang -fobjc-arc -fmodules -ISources/Auth -framework Foundation -framework Security .validation/KASecurity-test.m Tests/grant_tests.m -o .validation/grant_tests
+          .validation/grant_tests
+
       - name: Build unsigned IPA
         run: |
           chmod +x Scripts/build_ipa.sh
@@ -93,3 +99,16 @@ jobs:
             build/obj/auth-vm-validation.txt
           if-no-files-found: error
           retention-days: 1
+
+  login-preview:
+    runs-on: macos-15-intel
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - name: Render login on iPhone SE
+        run: bash Scripts/preview_login.sh
+      - uses: actions/upload-artifact@v4
+        with:
+          name: login-preview
+          path: .validation/login-iphone-se.png
+          if-no-files-found: error

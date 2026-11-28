@@ -1,7 +1,4 @@
-//
-//  FFManifest.m
-//  FFPatch
-//
+
 
 #import "FFManifest.h"
 #import "FFCore.h"
@@ -288,8 +285,7 @@
         } else if ([type isEqualToString:NSFileTypeRegular]) {
             onFile(absolute, relative);
         }
-        // Symlinks inside a payload are ignored on purpose: they would let a
-        // package point a target somewhere outside the container.
+
     }
 }
 

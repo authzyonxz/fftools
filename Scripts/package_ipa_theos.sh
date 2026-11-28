@@ -1,18 +1,18 @@
 #!/usr/bin/env bash
-# FFPatch — monta a IPA a partir dos artefatos que o Theos construiu.
-#
-#   THEOS=~/theos ./Scripts/build_theos.sh          # constrói dylib + launcher
-#   ./Scripts/package_ipa_theos.sh                  # empacota a IPA unsigned
-#
-# Não precisa de Mac: Theos (Linux/WSL/macOS/device) já gera a dylib e o stub;
-# este script só monta Payload/External iOS.app e zipa. A assinatura fica para
-# ESign / AltStore / Sideloadly no aparelho.
-#
-# Opcional:
-#   FFPATCH_DYLIB=/caminho/ffpatch.dylib
-#   EXTERNAL_LAUNCHER=/caminho/External
-#   OUTPUT_VERSION=1.0.1
-#   LDID=/path/ldid            → assina dylib+app com ldid (ad-hoc) se existir
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -57,7 +57,7 @@ cp "$DYLIB" "$APP/Frameworks/ffpatch.dylib"
 cp "$ROOT/Resources/Info.plist" "$APP/Info.plist"
 cp "$ROOT/Resources/License.plist" "$APP/License.plist"
 cp "$ROOT/Resources/Catalog.plist" "$APP/Catalog.plist"
-# Sem Resources/Payloads: payloads vêm do catálogo remoto (FPP1 cifrado).
+
 
 for asset in "$ROOT"/Resources/Assets/*.png; do
     cp "$asset" "$APP/$(basename "$asset")"

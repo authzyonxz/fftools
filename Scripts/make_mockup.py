@@ -98,7 +98,7 @@ def build_home(with_alert=False):
     image = Image.new("RGB", (W, H), BLACK)
     draw = ImageDraw.Draw(image)
 
-    # status bar
+    
     draw.text((64, 62), "17:59", font=font(SEMI, 34), fill=WHITE)
     bars = [(600, 106), (620, 96), (640, 86), (660, 76)]
     for x, top in bars:
@@ -109,7 +109,7 @@ def build_home(with_alert=False):
 
     text_center(draw, W // 2, 176, "FUNÇÕES", F_TITLE, WHITE)
 
-    # game cards
+    
     cards = [("Free Fire Normal", "ic_game_normal", True), ("Free Fire Max", "ic_game_max", False)]
     card_w, card_h = 366, 236
     positions = [(46, 268), (416, 268)]
@@ -150,7 +150,7 @@ def build_home(with_alert=False):
     y = section(y, "FUNÇÕES DE HOLOGRAMA")
     y = group(y, hologram, 140)
 
-    # tab bar
+    
     tab_top = H - 150
     draw.rectangle((0, tab_top, W, H), fill=(10, 10, 10))
     draw.rectangle((0, tab_top, W, tab_top + 2), fill=(30, 30, 30))
@@ -169,7 +169,7 @@ def build_home(with_alert=False):
         x = (W - card_w) // 2
         y = (H - card_h) // 2
         rounded(draw, (x, y, x + card_w, y + card_h), 44, fill=CARD2)
-        # success glyph
+        
         cy = y + 112
         draw.ellipse((W // 2 - 62, cy - 62, W // 2 + 62, cy + 62), fill=GREEN)
         draw.line(

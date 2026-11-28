@@ -1,7 +1,4 @@
-//
-//  FFAppDelegate.m
-//  FFPatch
-//
+
 
 #import "FFAppDelegate.h"
 #import "FFCore.h"
@@ -79,7 +76,6 @@
     self.authorizedHost = nil;
 }
 
-// Authorized content is always a child of the login gate's protected host.
 - (void)installContentController:(UIViewController *)controller {
     UIViewController *host = self.authorizedHost;
     if (!host || ![FFLicense current].apiValidated) return;
@@ -91,7 +87,7 @@
     [host addChildViewController:controller];
     controller.view.frame = host.view.bounds;
     controller.view.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
-    // HUDs stay inside the authorized content host.
+
     [host.view insertSubview:controller.view atIndex:0];
     [controller didMoveToParentViewController:host];
     self.contentController = controller;
@@ -255,9 +251,7 @@
 
 - (void)startSandboxInBackground {
     if (![FFLicense current].apiValidated) return;
-    // Every backend starts on its own, silently:
-    //   kernel (iOS 17/18) → kexploit_opa334 + sandbox_escape, 10–30 s
-    //   bad_query (26.0–26.6.1) / worse_query (26.7+/27) → grant probe
+
     dispatch_async(dispatch_get_global_queue(QOS_CLASS_USER_INITIATED, 0), ^{
         if (![FFLicense current].apiValidated) return;
         if (!FFSandboxOSIsSupported()) {

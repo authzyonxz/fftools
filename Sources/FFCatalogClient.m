@@ -1,8 +1,4 @@
 #import "FFLicense.h"
-//
-//  FFCatalogClient.m
-//  FFPatch
-//
 
 #import "FFCatalogClient.h"
 #import "FFCore.h"
@@ -113,7 +109,6 @@ NSString *const FFCatalogDidSyncNotification = @"FFCatalogDidSyncNotification";
         return NO;
     }
 
-    // Cache hit: same bytes, no network, no decrypt.
     if ([[NSFileManager defaultManager] fileExistsAtPath:destination]) {
         NSString *existing = FFSHA256HexOfFile(destination, NULL);
         if ([existing isEqualToString:expectedSHA]) return YES;
@@ -202,7 +197,6 @@ NSString *const FFCatalogDidSyncNotification = @"FFCatalogDidSyncNotification";
     result.catalogUpdatedAt = [catalog[@"updatedAt"] isKindOfClass:[NSString class]]
         ? catalog[@"updatedAt"] : nil;
 
-    // ---- download every published payload and build the manifest -----------
     NSArray *games = [catalog[@"games"] isKindOfClass:[NSArray class]] ? catalog[@"games"] : @[];
     NSArray *groups = [catalog[@"groups"] isKindOfClass:[NSArray class]] ? catalog[@"groups"] : @[];
 

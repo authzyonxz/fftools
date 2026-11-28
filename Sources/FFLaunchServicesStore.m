@@ -1,7 +1,4 @@
-//
-//  FFLaunchServicesStore.m
-//  FFPatch
-//
+
 
 #import "FFLaunchServicesStore.h"
 #import "FFCore.h"
@@ -15,7 +12,7 @@
 static const uint32_t FFMaxStringID = 0x01000000;
 static const NSUInteger FFMinimumStoreBytes = 0x1000;
 static const NSUInteger FFMaximumStoreBytes = 64 * 1024 * 1024;
-static const NSUInteger FFMaxBundleRecords = 20000;   // records per layout
+static const NSUInteger FFMaxBundleRecords = 20000;
 static const size_t FFMaxStringLength = 0x800;
 static const size_t FFMaximumRecordSize = 0x25c;
 
@@ -223,8 +220,6 @@ static NSDate *FFLSMissAt;
 
 #pragma mark - Directory helpers (grant-aware)
 
-/*! Plain listing only — used where a token is already held or where a walk
-    would be wasted (the caller decides whether pathleak is warranted). */
 static NSArray<NSString *> *FFLSListDirectoryCheap(NSString *directory) {
     if (directory.length == 0) return @[];
     NSArray<NSString *> *names = [[NSFileManager defaultManager]
@@ -237,10 +232,6 @@ static NSArray<NSString *> *FFLSListDirectory(NSString *directory) {
     NSArray<NSString *> *names = FFLSListDirectoryCheap(directory);
     if (names.count > 0) return names;
 
-    // Never grant here: the roots walked below are parent directories, and a
-    // grant on a non-container path returns -6/-4 while still costing a swap.
-    // fsgetpath itself needs no token, so the inode walk works on every
-    // backend where the plain listing is denied (26.x bad_query included).
     return FFPathleakListNames(directory, 2000000);
 }
 
@@ -302,7 +293,6 @@ static void FFLSInspectDirectory(NSString *directory, NSMutableArray<NSDictionar
 + (NSArray<NSDictionary *> *)candidates {
     NSMutableArray<NSDictionary *> *found = [NSMutableArray array];
 
-    // Remembered store first (fast path; validated by magic/size on read).
     NSString *remembered = [[NSUserDefaults standardUserDefaults]
         stringForKey:@"FFLaunchServicesStorePath"];
     if (remembered.length > 0) {
@@ -320,8 +310,6 @@ static void FFLSInspectDirectory(NSString *directory, NSMutableArray<NSDictionar
         [[NSUserDefaults standardUserDefaults] removeObjectForKey:@"FFLaunchServicesStorePath"];
     }
 
-    // Route 1: MCM class 10 for com.apple.lsd — a real container target, so a
-    // token can be minted for its Library/Caches (the directory lsd writes to).
     if (MCMBridgeAvailable()) {
         NSString *metadataError = nil;
         NSString *lsdContainer = MCMActivateContainerPath(10, @"com.apple.lsd", NO, &metadataError);
@@ -333,8 +321,6 @@ static void FFLSInspectDirectory(NSString *directory, NSMutableArray<NSDictionar
         }
     }
 
-    // Route 2: the daemon/system container trees. Listing the tree root is not
-    // granted (it is a parent, -6); each container's Caches is a mintable target.
     NSArray<NSString *> *daemonRoots = @[
         @"/var/mobile/Containers/Data/InternalDaemon",
         @"/var/mobile/Containers/Data/System",
@@ -349,12 +335,10 @@ static void FFLSInspectDirectory(NSString *directory, NSMutableArray<NSDictionar
             int64_t cacheGrant = FFSandboxGrantPath(caches, NO, NULL);
             FFLSInspectDirectory(caches, found);
             if (cacheGrant >= 0) FFSandboxReleaseHandle(cacheGrant);
-            if (found.count > 0) break;   // first daemon with a store wins
+            if (found.count > 0) break;
         }
     }
 
-    // Route 3: legacy locations. Grant the directory when it happens to be a
-    // container target; on failure keep going with a plain read.
     for (NSString *legacy in @[@"/var/db/lsd", @"/var/mobile/Library/Caches"]) {
         int64_t handle = FFSandboxGrantPath(legacy, NO, NULL);
         FFLSInspectDirectory(legacy, found);
@@ -400,7 +384,7 @@ static void FFLSInspectDirectory(NSString *directory, NSMutableArray<NSDictionar
 
     FFLaunchServicesSnapshot *result = nil;
     @try {
-        // ---- pass 1: collect Bundle and plug-in records -------------------
+
         BOOL tooManyRecords = NO;
         size_t offset = 0;
         while (offset + 8 + FFMaximumRecordSize <= length && !tooManyRecords) {
@@ -455,7 +439,6 @@ static void FFLSInspectDirectory(NSString *directory, NSMutableArray<NSDictionar
         }
         if (!anyRecords) return nil;
 
-        // ---- pass 2: decode the string table ------------------------------
         NSMutableDictionary<NSNumber *, NSString *> *strings = [NSMutableDictionary dictionary];
         NSMutableDictionary<NSNumber *, NSString *> *pathStrings = [NSMutableDictionary dictionary];
         NSMutableSet<NSNumber *> *pathConflicts = [NSMutableSet set];
@@ -509,7 +492,6 @@ static void FFLSInspectDirectory(NSString *directory, NSMutableArray<NSDictionar
             offset += 4;
         }
 
-        // ---- pass 3: resolve every layout, keep the best mapping ----------
         NSMutableDictionary<NSString *, NSString *> *bestContainers = nil;
         NSMutableDictionary<NSString *, NSString *> *bestDisplayNames = nil;
         NSString *bestLabel = nil;
@@ -629,8 +611,7 @@ static void FFLSInspectDirectory(NSString *directory, NSMutableArray<NSDictionar
 + (FFLaunchServicesSnapshot *)snapshot {
     [FFLSLock() lock];
     @try {
-        // A cached snapshot is only trusted while the store file on disk did not
-        // change (new app installed → lsd rewrites the file → new signature).
+
         if (FFLSCachedSnapshot != nil) {
             if ([self rememberedStoreSignatureMatches:FFLSCachedSignature]) {
                 return FFLSCachedSnapshot;
@@ -641,9 +622,6 @@ static void FFLSInspectDirectory(NSString *directory, NSMutableArray<NSDictionar
 
         NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
 
-        // In-memory miss backoff (1 h) and persisted miss backoff (24 h): a
-        // store that does not exist at launch must not be re-scanned on every
-        // lookup, and a miss must survive a relaunch.
         if (FFLSMissAt != nil && [[NSDate date] timeIntervalSinceDate:FFLSMissAt] < 3600.0) {
             return nil;
         }

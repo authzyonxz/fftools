@@ -1,7 +1,4 @@
-//
-//  FFLicense.m
-//  FFPatch
-//
+
 
 #import "FFLicense.h"
 #import "FFCore.h"
@@ -92,7 +89,7 @@ NSNotificationName const FFLicenseDidUpdateNotification = @"FFLicenseDidUpdateNo
 }
 
 - (BOOL)ensureAuthorizedWithError:(NSError **)error {
-    // Blocking adapter only for existing background operations. Never block UIKit.
+
     if (NSThread.isMainThread || !self.apiValidated || !self.client) {
         if (error) *error = KAError(@"SESSION_EXPIRED");
         return NO;

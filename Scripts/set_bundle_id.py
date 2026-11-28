@@ -34,8 +34,8 @@ APPGROUP_ENTITLEMENTS = {"com.apple.security.application-groups": [APP_GROUP]}
 
 
 def write_entitlements(payload):
-    # Empty-ish dict keeps ldid/codesign happy; the real entitlement set comes
-    # from the provisioning profile the signer uses.
+    
+    
     data = {key: value for key, value in payload.items() if value not in ("", None)}
     ENTITLEMENTS.write_bytes(plistlib.dumps(data))
 

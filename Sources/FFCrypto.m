@@ -1,7 +1,4 @@
-//
-//  FFCrypto.m
-//  FFPatch
-//
+
 
 #import "FFCrypto.h"
 #import "FFCore.h"
@@ -12,7 +9,7 @@
 #import <CommonCrypto/CommonHMAC.h>
 
 static NSData *FFDariveKeyWithSecret(NSData *secret, NSString *tag, NSString *functionID, NSString *gameID) {
-    // Server layout (lib/crypto.js): secret | "|" | tag | "|" | functionID | "|" | gameID
+
     NSMutableData *buffer = [NSMutableData data];
     NSData *secretBytes = secret;
     if (secretBytes == nil) return nil;
@@ -57,7 +54,6 @@ NSData *FFDecryptPack(NSData *pack, NSString *functionID, NSString *gameID, NSEr
         return nil;
     }
 
-    // HMAC over IV || ciphertext, constant-time compare.
     NSMutableData *macInput = [NSMutableData dataWithData:iv];
     [macInput appendData:ciphertext];
     unsigned char computed[CC_SHA256_DIGEST_LENGTH];

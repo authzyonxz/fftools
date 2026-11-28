@@ -1,7 +1,4 @@
-//
-//  FFContainerStore.m
-//  FFPatch
-//
+
 
 #import "FFContainerStore.h"
 #import "FFCore.h"
@@ -82,10 +79,6 @@ static NSString *const FFMCMetadataFileName  = @".com.apple.mobile_container_man
     NSMutableArray<NSString *> *attempts = [NSMutableArray array];
     NSString *resolved = nil;
 
-    // 0. MHA-C2: when the app is signed as com.apple.mobile.MobileHouseArrest
-    //    (the 3105 recipe), containermanagerd trusts it and hands the container
-    //    over directly. This is the primary path on iOS 26.x — no exploit
-    //    token needed for the lookup.
     if (FFSandboxHostIsMobileHouseArrest()) {
         NSString *mhaError = nil;
         NSString *mhaPath = MCMActivateContainerPath(kind == FFContainerKindData ? 2 : 1,
@@ -106,9 +99,6 @@ static NSString *const FFMCMetadataFileName  = @".com.apple.mobile_container_man
         [attempts addObject:[NSString stringWithFormat:@"MHA-C2: %@", mhaError ?: @"sem caminho"]];
     }
 
-    // 1. lsd's CSStore. On iOS 26.7+/27 this is the only source that still
-    //    pairs a bundle id with its data container when MCM refuses and the
-    //    per-container metadata plist is root-owned/unreadable.
     if (kind == FFContainerKindData) {
         resolved = [self lookupViaLaunchServices:bundleID attemptLog:attempts];
         if (resolved.length) {
@@ -118,7 +108,6 @@ static NSString *const FFMCMetadataFileName  = @".com.apple.mobile_container_man
         }
     }
 
-    // 2. MobileContainerManager query.
     resolved = [self lookupViaMCM:bundleID kind:kind attemptLog:attempts];
     if (resolved.length) {
         FFLog(@"container: %@ → %@ (MCM)", bundleID, resolved);
@@ -126,7 +115,6 @@ static NSString *const FFMCMetadataFileName  = @".com.apple.mobile_container_man
         return resolved;
     }
 
-    // 3. worse_query container index (identifier → path) and its reverse.
     resolved = [self lookupViaWorseQueryIndex:bundleID kind:kind attemptLog:attempts];
     if (resolved.length) {
         FFLog(@"container: %@ → %@ (worse_query index)", bundleID, resolved);
@@ -134,7 +122,6 @@ static NSString *const FFMCMetadataFileName  = @".com.apple.mobile_container_man
         return resolved;
     }
 
-    // 4. Plain filesystem metadata scan (last resort; needs a readable root).
     resolved = [self lookupViaMetadataScan:bundleID kind:kind attemptLog:attempts];
     if (resolved.length) {
         FFLog(@"container: %@ → %@ (metadata scan)", bundleID, resolved);
@@ -158,10 +145,6 @@ static NSString *const FFMCMetadataFileName  = @".com.apple.mobile_container_man
     [_lock unlock];
 }
 
-/*! A resolved path is usable when its shape is right and it can be stat'ed,
-    OR when the shape is right but the sandbox still refuses stat — because a
-    worse_query grant issued later will open it. Never discard a shape-valid
-    LaunchServices path just because open() is denied before a grant. */
 - (BOOL)isUsableContainerPath:(NSString *)path kind:(FFContainerKind)kind {
     if (path.length == 0) return NO;
     NSString *canonical = [FFLaunchServicesStore canonicalContainerPath:path];
@@ -172,7 +155,7 @@ static NSString *const FFMCMetadataFileName  = @".com.apple.mobile_container_man
     if (lstat(canonical.fileSystemRepresentation, &info) == 0) {
         return (info.st_mode & S_IFMT) == S_IFDIR;
     }
-    return YES;  // shape-valid; access comes from the sandbox grant
+    return YES;
 }
 
 - (BOOL)pathIsDirectory:(NSString *)path {
@@ -284,15 +267,9 @@ static NSString *const FFMCMetadataFileName  = @".com.apple.mobile_container_man
     NSArray<NSString *> *entries = [[NSFileManager defaultManager]
         contentsOfDirectoryAtPath:root error:NULL];
 
-    // One token on the app-data root is held for the whole scan: under
-    // bad_query/kernel that token also covers the plain reads of the
-    // containers below it (path-scoped tokens), so the scan does not need a
-    // grant per application. On worse_query the root is not a container and the
-    // grant is skipped (-6) — that backend resolves via LaunchServices.
     int64_t rootGrant = -1;
     if (entries.count == 0 && !worseQuery) {
-        // Walk up until bad_query accepts a path; an accepted ancestor covers
-        // the whole subtree, so the listing then works.
+
         NSString *cursor = root;
         while (cursor.length > 1) {
             rootGrant = FFSandboxGrantPath(cursor, NO, NULL);
@@ -308,9 +285,7 @@ static NSString *const FFMCMetadataFileName  = @".com.apple.mobile_container_man
         }
     }
     if (entries.count == 0) {
-        // fsgetpath enumeration needs no sandbox token: bad_query can reach
-        // Application/<uuid> but not the parent directory, so the inode walk is
-        // how the UUID list is obtained on 26.x as well.
+
         entries = FFPathleakListNames(root, 2000000);
     }
     if (entries.count == 0) {
@@ -323,7 +298,7 @@ static NSString *const FFMCMetadataFileName  = @".com.apple.mobile_container_man
         NSArray<NSString *> *sorted = [entries sortedArrayUsingSelector:@selector(compare:)];
         NSUInteger inspected = 0;
         for (NSString *entry in sorted) {
-            if (inspected++ > 600) break;   // bound the scan on huge devices
+            if (inspected++ > 600) break;
             if ([[NSUUID alloc] initWithUUIDString:entry] == nil) continue;
             NSString *directory = [root stringByAppendingPathComponent:entry];
             NSString *metadataPath = [directory stringByAppendingPathComponent:FFMCMetadataFileName];

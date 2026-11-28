@@ -1,7 +1,4 @@
-//
-//  FFWidgets.m
-//  FFPatch
-//
+
 
 #import "FFWidgets.h"
 #import "FFTheme.h"
@@ -74,7 +71,7 @@
         _toggle.translatesAutoresizingMaskIntoConstraints = NO;
         _toggle.onTintColor = [FFTheme success];
         _toggle.thumbTintColor = [UIColor colorWithWhite:0.35 alpha:1];
-        _toggle.accessibilityLabel = title;   // ligado = verde, preenchido
+        _toggle.accessibilityLabel = title;
         [_toggle addTarget:self
                     action:@selector(toggleChanged:)
           forControlEvents:UIControlEventValueChanged];

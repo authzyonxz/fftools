@@ -1,7 +1,4 @@
-//
-//  FFWidgets.h
-//  FFPatch — reusable views for the FUNÇÕES / PERFIL screens.
-//
+
 
 #ifndef FF_WIDGETS_H
 #define FF_WIDGETS_H
@@ -12,12 +9,10 @@ NS_ASSUME_NONNULL_BEGIN
 
 @class FFFunction, FFGame;
 
-/* ---- section header: "FUNÇÕES DE AIMBOT" ---- */
 @interface FFSectionHeaderView : UIView
 - (instancetype)initWithTitle:(NSString *)title;
 @end
 
-/* ---- one toggle row ---- */
 @interface FFFunctionRowView : UIView
 
 @property (nonatomic, copy, nullable) void (^onToggle)(BOOL isOn);
@@ -31,12 +26,10 @@ NS_ASSUME_NONNULL_BEGIN
 
 @end
 
-/* ---- rounded card that stacks rows ---- */
 @interface FFGroupCardView : UIView
 - (instancetype)initWithRows:(NSArray<FFFunctionRowView *> *)rows;
 @end
 
-/* ---- game selector card: icon + label, white outline when selected ---- */
 @interface FFGameCardView : UIControl
 
 @property (nonatomic, readonly) FFGame *game;
@@ -47,7 +40,6 @@ NS_ASSUME_NONNULL_BEGIN
 
 @end
 
-/* ---- Apple-style floating alert ---- */
 typedef NS_ENUM(NSInteger, FFAlertStyle) {
     FFAlertStyleSuccess = 0,
     FFAlertStyleFailure = 1,
@@ -56,20 +48,17 @@ typedef NS_ENUM(NSInteger, FFAlertStyle) {
 
 @interface FFStatusAlertView : UIView
 
-/*! Shows a status alert with a FECHAR button. */
 + (instancetype)showWithStyle:(FFAlertStyle)style
                          title:(NSString *)title
                        message:(NSString *)message
                         detail:(nullable NSString *)detail;
 
-/*! Spinner overlay ("APLICANDO…"). Call -dismiss when the work ends. */
 + (instancetype)showActivityWithTitle:(NSString *)title detail:(nullable NSString *)detail;
 
 - (void)dismiss;
 
 @end
 
-/* ---- small "ATIVO" pill used in the header ---- */
 @interface FFBadgeView : UIView
 - (instancetype)initWithText:(NSString *)text color:(UIColor *)color;
 - (void)setText:(NSString *)text color:(UIColor *)color;
@@ -77,4 +66,4 @@ typedef NS_ENUM(NSInteger, FFAlertStyle) {
 
 NS_ASSUME_NONNULL_END
 
-#endif /* FF_WIDGETS_H */
+#endif

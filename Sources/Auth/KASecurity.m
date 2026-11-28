@@ -9,6 +9,7 @@ static NSString *KAService(void) { return [NSString stringWithFormat:@"%@.extern
 
 NSError *KAError(NSString *code) {
     NSDictionary *messages = @{
+        @"INTEGRITY": @"A integridade do aplicativo não pôde ser confirmada. Reinstale uma cópia original.",
         @"KEY_REQUIRED": @"Digite sua key para continuar.",
         @"KEY_FORMAT": @"A key deve ter 15 caracteres: letras A–Z e números 1–9.",
         @"KEY_INVALID": @"Key inválida, pausada ou não pertencente ao EXTERNAL.",
@@ -96,7 +97,7 @@ SecKeyRef KACopyDeviceKey(NSError **error) {
     SecKeyRef key = SecKeyCreateRandomKey((__bridge CFDictionaryRef)attributes, &failure);
     CFRelease(access); if (failure) CFRelease(failure);
     if (!key && error) *error = KAError(@"SECURE_KEY");
-    return key; // No silent fallback to an exportable private key.
+    return key;
 }
 static NSData *KADERInteger(NSData *bytes) {
     const uint8_t *p = bytes.bytes; NSUInteger start = 0;
@@ -119,7 +120,7 @@ NSDictionary *KAVerifyGrant(NSString *jwt, NSString *sessionToken, NSString *ins
     NSDictionary *header = KAJSONObject(KAUnB64(parts[0]));
     if (![header[@"alg"] isEqual:@"ES256"] || ![header[@"typ"] isEqual:@"KA2+jwt"] ||
         ![header[@"kid"] isEqual:@"605JmqMJES2Jbv4b"] || header[@"crit"] != nil) return nil;
-    // Public verification key extracted from the owner's server, 2026-11-27. NOT a secret.
+
     NSData *x = KAUnB64(@"HdZDerHU3s-XNbstavzNU1GM2yVhacHl_iYk01NmWXY");
     NSData *y = KAUnB64(@"jSblrrKkR2W1UmgIb9u22zPH-k8YUSjVQJ6x1Yre-wY");
     uint8_t prefix = 4; NSMutableData *raw = [NSMutableData dataWithBytes:&prefix length:1];

@@ -1,7 +1,4 @@
-//
-//  FFAppDelegate.h
-//  FFPatch
-//
+
 
 #ifndef FF_APP_DELEGATE_H
 #define FF_APP_DELEGATE_H
@@ -18,8 +15,6 @@
 
 @end
 
-/*! Entry point exported by the dylib. The MH_EXECUTE stub (launcher/main.c)
-    dlopens the dylib and calls this, so the whole app is the dylib. */
 int FFAppMain(int argc, char *argv[]);
 
-#endif /* FF_APP_DELEGATE_H */
+#endif

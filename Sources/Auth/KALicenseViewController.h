@@ -5,7 +5,6 @@ NS_ASSUME_NONNULL_BEGIN
 - (instancetype)initWithClient:(KAExternalClient *)client onAuthorized:(void (^)(NSDictionary *license))onAuthorized;
 @end
 
-// Install as window.rootViewController. Factory is called ONLY after successful online authorization.
 @interface KAProtectedRootController : UIViewController
 - (instancetype)initWithContentFactory:(UIViewController * (^)(KAExternalClient *client, NSDictionary *license))factory;
 @end

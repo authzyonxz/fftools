@@ -111,7 +111,7 @@
 - (void)resumeSaved {
     if (!self.allowAutoLogin || self.autoAttempted || self.busy || UIApplication.sharedApplication.applicationState != UIApplicationStateActive) return;
     self.autoAttempted = YES;
-    // Presence alone never grants access: login performs the full online proof.
+
     if (KAReadLicense(NULL).length) [self login];
 }
 - (BOOL)textFieldShouldReturn:(UITextField *)textField { [self login]; return NO; }

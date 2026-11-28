@@ -1,13 +1,13 @@
 #!/usr/bin/env bash
-# FFPatch — Theos build (dylib + launcher) e, por padrão, já monta a IPA.
-#
-#   THEOS=~/theos ./Scripts/build_theos.sh
-#   THEOS=~/theos ./Scripts/build_theos.sh --no-ipa   # só compila
-#
-# Saída:
-#   .theos/obj/.../ffpatch.dylib          (a app inteira)
-#   launcher/.theos/obj/.../External        (stub MH_EXECUTE)
-#   build/External-iOS-<versão>-unsigned.ipa (quando não passa --no-ipa)
+
+
+
+
+
+
+
+
+
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"

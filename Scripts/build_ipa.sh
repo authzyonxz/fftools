@@ -1,15 +1,15 @@
 #!/usr/bin/env bash
-# FFPatch — unsigned IPA builder (macOS + Xcode command line tools).
-#
-#   ./Scripts/build_ipa.sh
-#
-# Produces build/Payload/External iOS.app and build/External-iOS-<version>-unsigned.ipa.
-# Sign afterwards with ESign / Sideloadly / AltStore (the App Group entitlement
-# matters on iOS 26.7+ / 27.x — see README).
-#
-# Optional env:
-#   CODESIGN_IDENTITY="Apple Development: ..."  → codesign dylib + app
-#   OUTPUT_VERSION=1.0.0                        → override IPA name
+
+
+
+
+
+
+
+
+
+
+
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -37,7 +37,7 @@ INCLUDES=(-I"$ROOT/Sources" -I"$ROOT/Sources/UI" -I"$ROOT/Sources/Vendor" \
           -I"$ROOT/Sources/Auth")
 C_ONLY_FLAGS=(-arch arm64 -miphoneos-version-min="$MIN_IOS" -isysroot "$SDK" -O2 -std=gnu17
               -Wno-unused-function)
-# Hardening: hidden visibility, dead-strip, anti-debug compiled in.
+
 COMMON_FLAGS=(-arch arm64 -miphoneos-version-min="$MIN_IOS" -isysroot "$SDK" -O2
               -fobjc-arc -fblocks -std=gnu17 -fvisibility=hidden -DFF_ENABLE_ANTIDEBUG=1
               -Wno-deprecated-declarations -Wno-unused-variable -Wno-unused-function
@@ -52,7 +52,7 @@ for source in "$ROOT"/Sources/*.m "$ROOT"/Sources/UI/*.m "$ROOT"/Sources/Auth/*.
     echo "   $(basename "$source")"
     case "$source" in
         *.c)
-            # plain C: no ARC/ObjC flags
+
             "$CLANG" "${C_ONLY_FLAGS[@]}" "${INCLUDES[@]}" -c "$source" -o "$object"
             ;;
         *)
@@ -69,7 +69,7 @@ done
     -framework QuartzCore -framework CoreFoundation -framework IOSurface \
     -framework Security -framework CFNetwork -framework SystemConfiguration -lz -lc++
 
-# Strip local symbols from the shipped dylib (best effort).
+
 if command -v xcrun >/dev/null 2>&1; then
     xcrun strip -x "$APP/Frameworks/ffpatch.dylib" || true
 fi
@@ -83,14 +83,14 @@ cp "$OBJ/Kagura-LICENSE.txt" "$APP/Kagura-LICENSE.txt"
 cp "$ROOT/Resources/Info.plist" "$APP/Info.plist"
 cp "$ROOT/Resources/License.plist" "$APP/License.plist"
 cp "$ROOT/Resources/Catalog.plist" "$APP/Catalog.plist"
-# Sem Resources/Payloads: os payloads vêm do catálogo remoto (FPP1 cifrado).
 
-# In-app artwork (UIImage imageNamed resolves @2x/@3x siblings automatically).
+
+
 for asset in "$ROOT"/Resources/Assets/*.png; do
     cp "$asset" "$APP/$(basename "$asset")"
 done
 
-# Flat springboard icons (CFBundleIconFiles fallback; works on sideloaded apps).
+
 ICONSET="$ROOT/Resources/Assets.xcassets/AppIcon.appiconset"
 cp "$ICONSET/Icon-60@2x.png" "$APP/AppIcon60x60@2x.png"
 cp "$ICONSET/Icon-60@3x.png" "$APP/AppIcon60x60@3x.png"

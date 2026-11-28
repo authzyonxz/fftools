@@ -1,7 +1,4 @@
-//
-//  FFPathleak.m
-//  FFPatch
-//
+
 
 #import "FFPathleak.h"
 #import "FFCore.h"
@@ -23,7 +20,6 @@ static NSString *FFPathleakStripPrivate(NSString *path) {
     return path;
 }
 
-/*! fsid of the volume holding `directory` (fallback /private/var). */
 static BOOL FFPathleakFileSystemID(NSString *directory, fsid_t *outID) {
     struct statfs info;
     if (statfs(directory.fileSystemRepresentation, &info) == 0) {
@@ -46,8 +42,6 @@ static BOOL FFPathleakInodeExists(fsid_t id, uint64_t inode) {
     return fsgetpath(buffer, sizeof(buffer), &id, inode) > 0;
 }
 
-/*! Upper bound for the inode sweep: probe down in blocks then refine, so a small
-    volume does not cost the full 2M walk. Returns `ceiling` when nothing hits. */
 static uint64_t FFPathleakCeiling(fsid_t id, uint64_t ceiling) {
     const uint64_t coarseStep = 8192;
     uint64_t probe = ceiling;
@@ -73,8 +67,6 @@ static uint64_t FFPathleakCeiling(fsid_t id, uint64_t ceiling) {
 
 #pragma mark - Cache
 
-/*! The inode walk is expensive and the probe + container resolution hit the
-    same roots repeatedly; results are memoised for two minutes. */
 static NSMutableDictionary<NSString *, NSDictionary *> *FFPathleakCache(void) {
     static NSMutableDictionary<NSString *, NSDictionary *> *cache;
     static dispatch_once_t onceToken;

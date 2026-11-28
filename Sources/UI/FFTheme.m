@@ -1,7 +1,4 @@
-//
-//  FFTheme.m
-//  FFPatch
-//
+
 
 #import "FFTheme.h"
 #import "FFAppDelegate.h"
@@ -123,8 +120,7 @@
     if (![delegate isKindOfClass:[FFAppDelegate class]]) return NO;
     UIView *container = [(FFAppDelegate *)delegate overlayContainerView];
     if (container == nil || container.window == nil) return NO;
-    // Application HUDs belong below the stable SDK presentation host.
-    // Never attach them to whichever window the SDK has made key.
+
     overlay.translatesAutoresizingMaskIntoConstraints = NO;
     [container addSubview:overlay];
     [NSLayoutConstraint activateConstraints:@[

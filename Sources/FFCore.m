@@ -1,7 +1,4 @@
-//
-//  FFCore.m
-//  FFPatch
-//
+
 
 #import "FFCore.h"
 
@@ -167,7 +164,7 @@ BOOL FFDeviceIsA10(void) {
     static dispatch_once_t onceToken;
     dispatch_once(&onceToken, ^{
         a10Identifiers = @[
-            // A10 Fusion
+
             @"iPhone9,1", @"iPhone9,3", @"iPhone9,4",
             @"iPad7,1", @"iPad7,2", @"iPad7,3", @"iPad7,4",
             @"iPad7,5", @"iPad7,6", @"iPad7,11", @"iPad7,12",
@@ -359,7 +356,7 @@ BOOL FFPathContainsSymlink(NSString *root, NSString *relativePath) {
         NSDictionary *attributes = [[NSFileManager defaultManager]
             attributesOfItemAtPath:cursor error:NULL];
         if (attributes == nil) {
-            // Missing component: nothing else to inspect, the caller may create it.
+
             return NO;
         }
         if ([attributes[NSFileType] isEqualToString:NSFileTypeSymbolicLink]) {

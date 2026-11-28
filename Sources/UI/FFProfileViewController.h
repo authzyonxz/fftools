@@ -1,7 +1,4 @@
-//
-//  FFProfileViewController.h
-//  FFPatch — "PERFIL" screen: key, duration, package, supported versions, build.
-//
+
 
 #ifndef FF_PROFILE_VIEW_CONTROLLER_H
 #define FF_PROFILE_VIEW_CONTROLLER_H
@@ -16,4 +13,4 @@
 
 @end
 
-#endif /* FF_PROFILE_VIEW_CONTROLLER_H */
+#endif
