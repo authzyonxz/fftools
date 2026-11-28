@@ -17,7 +17,7 @@ include $(THEOS)/makefiles/common.mk
 LIBRARY_NAME = ffpatch
 
 ffpatch_FILES = $(wildcard Sources/*.m) \
-                $(wildcard Sources/UI/*.m) \
+                $(wildcard Sources/UI/*.m) $(wildcard Sources/Auth/*.m) \
                 $(wildcard Sources/Vendor/*.m) \
                 $(wildcard Sources/Vendor/*.c)
 
@@ -30,7 +30,7 @@ ffpatch_PRIVATE_FRAMEWORKS = IOSurface
 ffpatch_CFLAGS = -fobjc-arc -std=gnu17 -fblocks -fvisibility=hidden -DFF_ENABLE_ANTIDEBUG=1 \
                  -I$(THEOS_PROJECT_DIR)/Sources \
                  -I$(THEOS_PROJECT_DIR)/Sources/Vendor \
-                 -I$(THEOS_PROJECT_DIR)/Sources/Vendor/LogosAPI \
+                 -I$(THEOS_PROJECT_DIR)/Sources/Auth \
                  -Wno-deprecated-declarations \
                  -Wno-unused-variable \
                  -Wno-unused-function \
@@ -39,8 +39,7 @@ ffpatch_CFLAGS = -fobjc-arc -std=gnu17 -fblocks -fvisibility=hidden -DFF_ENABLE_
 
 
 
-ffpatch_LDFLAGS = -Wl,-x -Wl,-dead_strip -ObjC -lz -lc++ \
-                  $(THEOS_PROJECT_DIR)/Sources/Vendor/LogosAPI/libAPIClient.a
+ffpatch_LDFLAGS = -Wl,-x -Wl,-dead_strip -ObjC -lz -lc++
 
 include $(THEOS_MAKE_PATH)/library.mk
 
@@ -50,5 +49,3 @@ after-ffpatch-all::
 	@echo "FFPatch: dylib em $(THEOS_OBJ_DIR)/ffpatch.dylib"
 	@echo "FFPatch: para gerar a IPA → Scripts/package_ipa_theos.sh"
 
-before-all::
-	python3 "$(THEOS_PROJECT_DIR)/Scripts/fetch_logos_api.py"

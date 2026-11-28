@@ -13,7 +13,6 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-python3 "$ROOT/Scripts/fetch_logos_api.py"
 BUILD="$ROOT/build"
 APP="$BUILD/Payload/External iOS.app"
 OBJ="$BUILD/obj"
@@ -35,7 +34,7 @@ rm -rf "$BUILD"
 mkdir -p "$APP/Frameworks" "$OBJ"
 
 INCLUDES=(-I"$ROOT/Sources" -I"$ROOT/Sources/UI" -I"$ROOT/Sources/Vendor" \
-          -I"$ROOT/Sources/Vendor/LogosAPI")
+          -I"$ROOT/Sources/Auth")
 C_ONLY_FLAGS=(-arch arm64 -miphoneos-version-min="$MIN_IOS" -isysroot "$SDK" -O2 -std=gnu17
               -Wno-unused-function)
 # Hardening: hidden visibility, dead-strip, anti-debug compiled in.
@@ -46,7 +45,7 @@ COMMON_FLAGS=(-arch arm64 -miphoneos-version-min="$MIN_IOS" -isysroot "$SDK" -O2
 
 echo "== compilando dylib"
 OBJECTS=()
-for source in "$ROOT"/Sources/*.m "$ROOT"/Sources/UI/*.m "$ROOT"/Sources/Vendor/*.m "$ROOT"/Sources/Vendor/*.c; do
+for source in "$ROOT"/Sources/*.m "$ROOT"/Sources/UI/*.m "$ROOT"/Sources/Auth/*.m "$ROOT"/Sources/Vendor/*.m "$ROOT"/Sources/Vendor/*.c; do
     [ -e "$source" ] || continue
     object="$OBJ/$(basename "${source%.*}").o"
     echo "   $(basename "$source")"
@@ -65,7 +64,6 @@ done
 "$CLANG" -arch arm64 -miphoneos-version-min="$MIN_IOS" -isysroot "$SDK" \
     -dynamiclib -install_name @rpath/ffpatch.dylib -Wl,-x -Wl,-dead_strip -ObjC \
     -o "$APP/Frameworks/ffpatch.dylib" "${OBJECTS[@]}" \
-    "$ROOT/Sources/Vendor/LogosAPI/libAPIClient.a" \
     -framework UIKit -framework Foundation -framework CoreGraphics \
     -framework QuartzCore -framework CoreFoundation -framework IOSurface \
     -framework Security -framework CFNetwork -framework SystemConfiguration -lz -lc++

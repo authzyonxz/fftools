@@ -68,7 +68,7 @@ def main() -> int:
         apply(MHA_ID, MHA_ENTITLEMENTS, [
             "Assine com certificado ENTERPRISE + profile WILDCARD (o bundle id com.apple.* não existe como App ID).",
             "AltStore / SideStore / Sideloadly / LiveContainer NÃO suportam esse caminho (é o mesmo aviso do 3105).",
-            "Se a sua API (Logos/KeyAuth) valida o package, ajuste o package para com.apple.mobile.MobileHouseArrest.",
+            "A API EXTERNAL usa o slug external1; alterar Bundle ID pode exigir migração do Keychain/HWID.",
             "Bad query em 26.x usa MHA-C2 + grants; não precisa de App Group.",
         ])
         return 0

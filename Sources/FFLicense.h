@@ -7,6 +7,7 @@
 #define FF_LICENSE_H
 
 #import <Foundation/Foundation.h>
+#import "KAExternalClient.h"
 
 NS_ASSUME_NONNULL_BEGIN
 
@@ -16,11 +17,11 @@ FOUNDATION_EXPORT NSNotificationName const FFLicenseDidUpdateNotification;
 
 @property (nonatomic, copy) NSString *key;                // Retained for local compatibility; never shown in Perfil.
 @property (nonatomic, copy) NSString *duration;           // API expiry date / status text.
-@property (nonatomic, copy) NSString *packageName;        // Package name returned by Logos API.
+@property (nonatomic, copy) NSString *packageName;        // Validated EXTERNAL package.
 @property (nonatomic, copy) NSString *compatibleRanges;
 @property (nonatomic, copy) NSString *build;
 @property (nonatomic, copy) NSString *status;             // API validation status.
-@property (nonatomic, assign, readonly) BOOL apiValidated;
+@property (atomic, assign, readonly) BOOL apiValidated;
 
 /* Device rows shown under the profile card. */
 @property (nonatomic, copy) NSString *deviceModel;
@@ -30,7 +31,8 @@ FOUNDATION_EXPORT NSNotificationName const FFLicenseDidUpdateNotification;
 @property (nonatomic, copy) NSString *accessStatus;
 
 + (instancetype)current;
-- (void)startWithCompletion:(nullable dispatch_block_t)completion;
+- (void)adoptClient:(KAExternalClient *)client license:(NSDictionary *)license;
+- (BOOL)ensureAuthorizedWithError:(NSError **)error;
 - (NSString *)summaryText;
 
 @end

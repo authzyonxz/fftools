@@ -6,18 +6,13 @@
 #import "FFLicense.h"
 #import "FFCore.h"
 #import "FFSandbox.h"
-#import "Vendor/LogosAPI/APIClient.h"
+#import "KASecurity.h"
 
 NSNotificationName const FFLicenseDidUpdateNotification = @"FFLicenseDidUpdateNotification";
 
-static NSString *FFLicenseStringFromAPI(const char *value) {
-    if (value == NULL || value[0] == '\0') return nil;
-    NSString *result = [NSString stringWithUTF8String:value];
-    return result.length ? result : nil;
-}
-
 @interface FFLicense ()
-@property (nonatomic, assign, readwrite) BOOL apiValidated;
+@property (atomic, assign, readwrite) BOOL apiValidated;
+@property (nonatomic, strong) KAExternalClient *client;
 @end
 
 @implementation FFLicense
@@ -31,6 +26,7 @@ static NSString *FFLicenseStringFromAPI(const char *value) {
     static dispatch_once_t onceToken;
     dispatch_once(&onceToken, ^{
         license = [FFLicense create];
+    [[NSNotificationCenter defaultCenter] addObserver:license selector:@selector(didLock:) name:KAExternalDidLockNotification object:nil];
     });
     return license;
 }
@@ -74,27 +70,49 @@ static NSString *FFLicenseStringFromAPI(const char *value) {
     return license;
 }
 
-- (void)startWithCompletion:(dispatch_block_t)completion {
-    static dispatch_once_t onceToken;
-    dispatch_once(&onceToken, ^{
-        dispatch_async(dispatch_get_main_queue(), ^{
-            apiclient_set_token("YkSXOtvqlVQy/9oPcI7bv1rTn2fveQzSGfqdvg5f20CNi0nwolEDstMEOrlEsxHyiUUj4M/7hRwYD6VApIf9c3kkgQYy6dWE/B69+eT5F0g=");
-            apiclient_set_language("en");
-            apiclient_paid(^{
-                dispatch_async(dispatch_get_main_queue(), ^{
-                    self.apiValidated = YES;
-                    self.status = @"ATIVA";
-                    self.key = FFLicenseStringFromAPI(apiclient_get_key()) ?: @"";
-                    self.packageName = FFLicenseStringFromAPI(apiclient_get_package_name()) ?: @"—";
-                    self.duration = FFLicenseStringFromAPI(apiclient_get_expired_at_local())
-                        ?: FFLicenseStringFromAPI(apiclient_get_expired_at()) ?: @"—";
-                    [[NSNotificationCenter defaultCenter]
-                        postNotificationName:FFLicenseDidUpdateNotification object:self];
-                    if (completion) completion();
-                });
-            });
-        });
+- (void)adoptClient:(KAExternalClient *)client license:(NSDictionary *)license {
+    self.client = client;
+    self.apiValidated = YES;
+    self.status = @"ATIVA";
+    self.key = @"";
+    self.packageName = @"EXTERNAL";
+    NSDate *expiry = [NSDate dateWithTimeIntervalSince1970:[license[@"expiresAt"] doubleValue] / 1000.0];
+    NSDateFormatter *formatter = [NSDateFormatter new];
+    formatter.dateStyle = NSDateFormatterMediumStyle;
+    formatter.timeStyle = NSDateFormatterShortStyle;
+    self.duration = [formatter stringFromDate:expiry];
+    [[NSNotificationCenter defaultCenter] postNotificationName:FFLicenseDidUpdateNotification object:self];
+}
+
+- (void)didLock:(NSNotification *)notification {
+    if (notification.object != self.client) return;
+    self.apiValidated = NO;
+    self.status = @"VALIDAÇÃO NECESSÁRIA";
+    [[NSNotificationCenter defaultCenter] postNotificationName:FFLicenseDidUpdateNotification object:self];
+}
+
+- (BOOL)ensureAuthorizedWithError:(NSError **)error {
+    // Blocking adapter only for existing background operations. Never block UIKit.
+    if (NSThread.isMainThread || !self.apiValidated || !self.client) {
+        if (error) *error = KAError(@"SESSION_EXPIRED");
+        return NO;
+    }
+    dispatch_semaphore_t done = dispatch_semaphore_create(0);
+    __block NSError *failure = nil;
+    __block BOOL valid = NO;
+    dispatch_async(dispatch_get_main_queue(), ^{
+        [self.client revalidate:^(NSDictionary *license, NSError *apiError) {
+            failure = apiError;
+            valid = license != nil && apiError == nil;
+            dispatch_semaphore_signal(done);
+        }];
     });
+    if (dispatch_semaphore_wait(done, dispatch_time(DISPATCH_TIME_NOW, 25 * NSEC_PER_SEC)) != 0) {
+        if (error) *error = KAError(@"NETWORK");
+        return NO;
+    }
+    if (!valid && error) *error = failure ?: KAError(@"SESSION_EXPIRED");
+    return valid && self.apiValidated;
 }
 
 - (NSString *)summaryText {

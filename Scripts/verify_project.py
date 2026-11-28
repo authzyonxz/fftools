@@ -135,7 +135,7 @@ def check_sources():
         "Scripts/build_ipa.sh", "Scripts/build_theos.sh", "Scripts/package_ipa_theos.sh",
         "Scripts/make_icons.py",
         "Scripts/protect_config.py", "Scripts/verify_project.py",
-        "Sources/Vendor/LogosAPI/APIClient.h", "Sources/Vendor/LogosAPI/libAPIClient.a",
+        "Sources/Auth/KAExternalClient.m", "Sources/Auth/KASecurity.m", "Sources/Auth/KALicenseViewController.m",
         "Resources/SourceArt/ff_normal.jpg", "Resources/SourceArt/ff_max.jpg",
         "Resources/SourceArt/app_logo.jpg",
     ]
@@ -145,61 +145,21 @@ def check_sources():
     notes.append(f"{len(required)} arquivos de fonte/scripts conferidos")
 
 
-def check_logos_api_integration():
-    """Check build wiring without looking for or requiring a token value."""
+def check_external_api_integration():
     references = {
-        "Scripts/build_ipa.sh": (
-            "libAPIClient.a", "Sources/Vendor/LogosAPI",
-            "-framework CFNetwork", "-framework SystemConfiguration", "-lc++",
-        ),
-        "Scripts/package_ipa_theos.sh": ("ffpatch.dylib",),
-        "Makefile": (
-            "libAPIClient.a", "Sources/Vendor/LogosAPI", "CFNetwork",
-            "SystemConfiguration", "-ObjC", "-lz", "-lc++",
-        ),
-        ".github/workflows/build.yml": (
-            "workflow_dispatch",
-        ),
-        "Sources/FFLicense.m": (
-            "apiclient_set_token", "apiclient_paid(",
-            "apiclient_get_package_name", "apiclient_get_expired_at",
-        ),
-        "Sources/FFPatchEngine.m": ("apiValidated", "FFErrorAccessDenied"),
-        "Sources/FFAppDelegate.m": ("startWithCompletion", "startupServicesStarted"),
+        "Sources/FFAppDelegate.m": ("KAProtectedRootController", "adoptClient"),
+        "Sources/FFLicense.m": ("revalidate:", "ensureAuthorizedWithError"),
+        "Sources/Auth/KASecurity.m": ("external1", "5d933aad-02da-4f37-a509-dfffee5600ed", "SecKeyVerifySignature"),
+        "Sources/FFPatchEngine.m": ("ensureAuthorizedWithError",),
+        "Scripts/build_ipa.sh": ("Sources/Auth",),
     }
     for relative, expected in references.items():
-        path = os.path.join(ROOT, relative)
-        if not os.path.isfile(path):
-            fail(f"integração Logos API: arquivo ausente: {relative}")
-            continue
-        with open(path, encoding="utf-8") as handle:
+        with open(os.path.join(ROOT, relative), encoding="utf-8") as handle:
             text = handle.read()
         for reference in expected:
             if reference not in text:
-                fail(f"integração Logos API: referência ausente em {relative}: {reference}")
-        if "APIClientLite" in text or "API Lite" in text:
-            fail(f"integração Logos API: referência à variante Lite em {relative}")
-
-    header_path = os.path.join(ROOT, "Sources/Vendor/LogosAPI/APIClient.h")
-    if os.path.isfile(header_path):
-        with open(header_path, encoding="utf-8") as handle:
-            header = handle.read()
-        for symbol in ("apiclient_set_token", "apiclient_set_language", "apiclient_paid",
-                       "apiclient_on_check_package", "apiclient_get_package_name"):
-            if symbol not in header:
-                fail(f"header da API completa sem {symbol}")
-        if "@interface APIClient" in header or "start:" in header:
-            fail("header Lite/Objective-C detectado no lugar do header C completo")
-
-    archive_path = os.path.join(ROOT, "Sources/Vendor/LogosAPI/libAPIClient.a")
-    if os.path.isfile(archive_path):
-        digest = hashlib.sha256(open(archive_path, "rb").read()).hexdigest()
-        if digest != "1006c9e30e96022718854a08d3b1376cb08975c337b423025d2dcb2752efb801":
-            fail("libAPIClient.a não corresponde ao archive oficial v6.2.0 verificado")
-    if os.path.exists(os.path.join(ROOT, "Sources/Vendor/LogosAPI/libAPIClientLite.a")):
-        fail("a variante libAPIClientLite.a ainda existe no vendor do projeto")
-
-    notes.append("Logos API completa v6.2.0: hash, header C, token direto, gates de ativação e build conferidos")
+                fail(f"EXTERNAL integration missing: {relative}: {reference}")
+    notes.append("EXTERNAL v2: login gate, signature, package and online checks wired")
 
 
 def check_site():
@@ -245,7 +205,7 @@ def main():
     check_plists()
     check_assets()
     check_sources()
-    check_logos_api_integration()
+    check_external_api_integration()
     check_site()
     check_manifest_consistency()
 

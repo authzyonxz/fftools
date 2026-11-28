@@ -1,3 +1,4 @@
+#import "FFLicense.h"
 //
 //  FFCatalogClient.m
 //  FFPatch
@@ -146,6 +147,13 @@ NSString *const FFCatalogDidSyncNotification = @"FFCatalogDidSyncNotification";
 
 - (FFCatalogResult *)syncWithTimeout:(NSTimeInterval)timeout {
     FFCatalogResult *result = [FFCatalogResult new];
+    NSError *authorizationError = nil;
+    if (![[FFLicense current] ensureAuthorizedWithError:&authorizationError]) {
+        result.error = authorizationError;
+        result.hadNetworkError = YES;
+        result.manifest = [FFManifest emptyManifest];
+        return result;
+    }
     NSString *baseURL = [self catalogBaseURL];
     NSString *cacheRoot = [self cacheRoot];
     NSString *cachedCatalogPath = [cacheRoot stringByAppendingPathComponent:@"catalog.json"];

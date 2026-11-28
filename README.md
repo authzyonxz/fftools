@@ -1,3 +1,19 @@
+# EXTERNAL iOS 1.2.0 — KeyAuth v2
+
+Esta versão substitui a autenticação antiga pelo login próprio de keyauthv2.org,
+fixado no pacote EXTERNAL/external1. A biblioteca anterior não é baixada nem ligada.
+A interface só abre após assinatura ES256 e introspecção online aceitas.
+As ativações revalidam a licença; restauração de arquivos originais mantém seu fluxo.
+
+O app exige assinatura iOS válida para Keychain/Secure Enclave. O IPA gerado sem
+certificado é unsigned. Keys já vinculadas a outro esquema de instalação podem
+precisar de reset de HWID. Nenhum token administrativo é embutido no login.
+
+O catálogo /3106 continua sendo o serviço existente: sua proteção de acesso no
+servidor é uma alteração separada. Não há promessa de bloqueio absoluto de patches.
+
+## Histórico do projeto (pode descrever versões anteriores)
+
 # FFPatch — patch por arquivo cru do container, com catálogo remoto
 
 App iOS em **Objective-C puro** que aplica arquivos dentro do container de

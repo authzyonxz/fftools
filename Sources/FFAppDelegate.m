@@ -15,9 +15,11 @@
 #import "FFWidgets.h"
 #import "FFTheme.h"
 #import "FFLicense.h"
+#import "KALicenseViewController.h"
 
 @interface FFAppDelegate ()
 @property (nonatomic, strong) UITabBarController *tabs;
+@property (nonatomic, strong) UIViewController *authorizedHost;
 @property (nonatomic, strong) UIViewController *contentController;
 @property (nonatomic, strong) UIViewController *loadingController;
 @property (nonatomic, strong) FFCatalogResult *lastResult;
@@ -49,28 +51,38 @@
                                                  name:@"FFCatalogSyncRequestNotification"
                                                object:nil];
 
-    [self showLoadingWithText:@"inicializando API"];
-    [self.window makeKeyAndVisible];
-
-    [[FFLicense current] startWithCompletion:^{
+    [[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(licenseLocked:) name:KAExternalDidLockNotification object:nil];
+    __weak typeof(self) weakSelf = self;
+    self.window.rootViewController = [[KAProtectedRootController alloc] initWithContentFactory:^UIViewController *(KAExternalClient *client, NSDictionary *license) {
+        typeof(self) self = weakSelf;
+        if (!self) return nil;
+        [[FFLicense current] adoptClient:client license:license];
+        self.authorizedHost = [UIViewController new];
+        self.authorizedHost.view.backgroundColor = UIColor.blackColor;
         self.startupServicesStarted = YES;
         [self showLoadingWithText:@"sincronizando catálogo"];
         [self startCatalogSyncWithTimeout:12.0];
         [self startSandboxInBackground];
+        return self.authorizedHost;
     }];
+    [self.window makeKeyAndVisible];
     return YES;
 }
 
 #pragma mark - Catalogue
 
-// Keep the window's presenter alive while the API displays its own interface.
+- (void)licenseLocked:(NSNotification *)notification {
+    self.startupServicesStarted = NO;
+    self.tabs = nil;
+    self.contentController = nil;
+    self.loadingController = nil;
+    self.authorizedHost = nil;
+}
+
+// Authorized content is always a child of the login gate's protected host.
 - (void)installContentController:(UIViewController *)controller {
-    UIViewController *host = self.window.rootViewController;
-    if (host == nil) {
-        host = [UIViewController new];
-        host.view.backgroundColor = [UIColor blackColor];
-        self.window.rootViewController = host;
-    }
+    UIViewController *host = self.authorizedHost;
+    if (!host || ![FFLicense current].apiValidated) return;
     UIViewController *previous = self.contentController;
     [previous willMoveToParentViewController:nil];
     [previous.view removeFromSuperview];
@@ -79,7 +91,7 @@
     [host addChildViewController:controller];
     controller.view.frame = host.view.bounds;
     controller.view.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
-    // API-owned overlays stay above the application's content.
+    // HUDs stay inside the authorized content host.
     [host.view insertSubview:controller.view atIndex:0];
     [controller didMoveToParentViewController:host];
     self.contentController = controller;

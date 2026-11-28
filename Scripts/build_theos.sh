@@ -11,7 +11,6 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-python3 "$ROOT/Scripts/fetch_logos_api.py"
 export THEOS="${THEOS:-$HOME/theos}"
 MAKE_IPA=1
 

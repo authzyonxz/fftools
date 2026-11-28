@@ -210,10 +210,7 @@ static NSRecursiveLock *FFPatchEngineOperationLock(void) {
     NSRecursiveLock *operationLock = FFPatchEngineOperationLock();
     [operationLock lock];
     @try {
-    if (![FFLicense current].apiValidated) {
-        if (error) *error = FFMakeError(FFErrorAccessDenied, @"A API não autorizou esta ativação");
-        return NO;
-    }
+    if (![[FFLicense current] ensureAuthorizedWithError:error]) return NO;
     if (!FFSandboxOSIsSupported()) {
         if (error) *error = FFMakeError(FFErrorUnsupportedOS, @"%@", FFSandboxUnsupportedReason());
         return NO;

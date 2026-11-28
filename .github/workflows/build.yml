@@ -19,9 +19,6 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Fetch official full Logos API
-        run: python3 Scripts/fetch_logos_api.py
-
       - name: Toolchain
         run: |
           xcodebuild -version
@@ -53,7 +50,6 @@ jobs:
       - name: Build unsigned IPA
         run: |
           chmod +x Scripts/build_ipa.sh
-          echo "1006c9e30e96022718854a08d3b1376cb08975c337b423025d2dcb2752efb801  Sources/Vendor/LogosAPI/libAPIClient.a" | shasum -a 256 --check
           ./Scripts/build_ipa.sh
 
       - name: Verify bundle layout and unsigned state
@@ -72,17 +68,13 @@ jobs:
             exit 1
           fi
           echo "FFAppMain exportado para dlsym: OK"
-          for symbol in _apiclient_set_token _apiclient_paid _apiclient_get_package_name _apiclient_get_expired_at _apiclient_get_expired_at_local; do
-            if ! nm -g "$APP/Frameworks/ffpatch.dylib" | grep -Fq "$symbol"; then
-              echo "API completa não ligada dentro da dylib: falta $symbol" >&2
-              exit 1
-            fi
-          done
-          if otool -L "$APP/Frameworks/ffpatch.dylib" | grep -qi 'APIClient'; then
-            echo "A API deveria estar ligada estaticamente, sem dependência de dylib separada" >&2
+          if nm "$APP/Frameworks/ffpatch.dylib" | grep -q '_apiclient_'; then
+            echo "Old authentication symbols unexpectedly linked" >&2
             exit 1
           fi
-          echo "API completa ligada estaticamente; nenhum .a no bundle: OK"
+          strings "$APP/Frameworks/ffpatch.dylib" | grep -q 'KAExternalClient'
+          strings "$APP/Frameworks/ffpatch.dylib" | grep -q 'external1'
+          echo "EXTERNAL v2 login linked; old authentication removed."
           echo "IPA is unsigned and contains its masked catalog configuration."
           echo "--- linked images ---"
           otool -L "$APP/Frameworks/ffpatch.dylib"
