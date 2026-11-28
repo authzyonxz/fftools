@@ -2,6 +2,12 @@ name: external-sdk-validation
 on:
   push:
     branches: [codex/external-sdk]
+    paths:
+      - 'SDK/KeyAuthExternal/ios/**'
+      - 'SDK/KeyAuthExternal/cpp/**'
+      - 'SDK/KeyAuthExternal/objc-aes/**'
+      - 'SDK/KeyAuthExternal/tests/**'
+      - '.github/workflows/external-sdk-validation.yml'
 permissions:
   contents: read
 jobs:
@@ -13,8 +19,10 @@ jobs:
       - name: Compile iOS SDK and test cryptography
         run: bash SDK/KeyAuthExternal/tests/validate-ios.sh
       - name: Render UIKit login on iPhone simulator
+        if: contains(github.event.head_commit.message, 'render')
         run: bash SDK/KeyAuthExternal/tests/preview-ios.sh
       - uses: actions/upload-artifact@v4
+        if: contains(github.event.head_commit.message, 'render')
         with:
           name: external-login-preview
           path: SDK/KeyAuthExternal/.validation/login-iphone-se.png
